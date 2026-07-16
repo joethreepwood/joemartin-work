@@ -5,13 +5,20 @@
 (function () {
   document.querySelectorAll('[data-carousel]').forEach(function (root) {
     var track = root.querySelector('[data-track]');
+    if (!track) return;
     var slides = Array.prototype.slice.call(track.children);
+    if (slides.length < 2) return;
     var prev = root.querySelector('[data-prev]');
     var next = root.querySelector('[data-next]');
     var dotsWrap = root.querySelector('[data-dots]');
-    if (!track || slides.length < 2) return;
 
     var current = 0;
+
+    // Screen-reader live region: announces the current slide
+    var status = document.createElement('span');
+    status.className = 'sr-only';
+    status.setAttribute('aria-live', 'polite');
+    root.appendChild(status);
 
     // Build a dot per slide
     var dots = slides.map(function (_, i) {
@@ -44,6 +51,7 @@
       });
       if (prev) prev.disabled = current === 0;
       if (next) next.disabled = current === slides.length - 1;
+      status.textContent = 'Screenshot ' + (current + 1) + ' of ' + slides.length;
     }
 
     if (prev) prev.addEventListener('click', function () { go(current - 1); });
