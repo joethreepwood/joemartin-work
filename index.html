@@ -18,7 +18,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Spectral:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -29,10 +29,7 @@
     HOW TO EDIT THIS SITE
     ------------------------------------------------------------
     - Each project is one <section class="entry">…</section>.
-      Copy one to add a project; it auto-gets the next colour in
-      the palette cycle and its own index number.
-    - Decorative shapes are inline SVGs with class "doodle".
-      They're purely visual — delete any you don't like.
+      Copy one to add a project; give it the next index number.
     - Colours/spacing live in the :root block at the top of style.css.
     - Images are in the images folder. To embed (YouTube etc.), drop
       an iframe inside a section's .entry__media in place of the image.
@@ -49,12 +46,7 @@
   <!-- ===================== HERO ===================== -->
   <header class="hero">
     <div class="hero__text">
-      <h1 class="hero__title">
-        Hi, I&rsquo;m <span class="hl">Joe<svg class="hl__line" viewBox="0 0 240 24" aria-hidden="true"><path d="M4 16 Q60 4 120 12 T236 10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/></svg></span>.
-      </h1>
-
-      <!-- doodle: sparkle -->
-      <svg class="doodle doodle--star" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 2C56 40 60 44 98 50C60 56 56 60 50 98C44 60 40 56 2 50C40 44 44 40 50 2Z"/></svg>
+      <h1 class="hero__title">Hi, I&rsquo;m <span class="hl">Joe</span>.</h1>
 
       <p>
         I was an editor for the UK&rsquo;s biggest tech publications. Now I lead
@@ -73,16 +65,14 @@
         directly.
       </p>
       <nav class="btns">
-        <a class="btn" href="mailto:joemartinwords@gmail.com">Get in touch</a>
-        <a class="btn btn--ghost" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
-        <a class="btn btn--ghost" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn--solid" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+        <a class="btn" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
+        <a class="btn" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </div>
 
     <div class="hero__media">
       <img src="images/hero.jpg" alt="">
-      <!-- doodle: arrow pointing down to the work -->
-      <svg class="doodle doodle--arrow" viewBox="0 0 80 110" aria-hidden="true"><path d="M40 4 V96 M14 68 L40 100 L66 68" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
   </header>
 
@@ -341,13 +331,11 @@
 
   <!-- ===================== FOOTER ===================== -->
   <footer class="footer">
-    <!-- doodle: big loopy scribble -->
-    <svg class="doodle doodle--loop" viewBox="0 0 200 80" aria-hidden="true"><path d="M6 40c30-50 60 40 90 0s50-40 70 10-30 40-40 10" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/></svg>
     <h2>Get in touch</h2>
     <nav class="btns btns--center">
-      <a class="btn" href="mailto:joemartinwords@gmail.com">Email me</a>
-      <a class="btn btn--ghost btn--onDark" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
-      <a class="btn btn--ghost btn--onDark" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn--onDark" href="mailto:joemartinwords@gmail.com">Email me</a>
+      <a class="btn btn--onDark" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
+      <a class="btn btn--onDark" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
     </nav>
     <p class="footer__fine">&copy; Joe Martin. Built with plain HTML, hosted on GitHub Pages.</p>
   </footer>
