@@ -174,17 +174,52 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
 /* ---------- Wide gallery entry (e.g. The Vigil) ---------- */
 .entry--wide { display: block; }
 .entry--wide .entry__body { max-width: 66ch; margin-bottom: clamp(1.5rem, 3vw, 2.4rem); }
-.entry__gallery {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: clamp(0.75rem, 2vw, 1.25rem);
-}
-.entry__gallery img {
-  width: 100%;
+
+/* ---------- Carousel ---------- */
+.carousel { position: relative; }
+.carousel__track {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   border: 1px solid var(--ink);
-  box-shadow: 0 12px 30px rgba(23,20,15,0.20);
+  box-shadow: 0 14px 34px rgba(23,20,15,0.22);
   background: #05070c;
 }
+.carousel__track::-webkit-scrollbar { display: none; }
+.carousel__slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  margin: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.carousel__slide img { width: 100%; display: block; }
+
+.carousel__btn {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 2.6rem; height: 2.6rem;
+  display: none; place-items: center;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--ink);
+  font-family: var(--mono); font-size: 1.2rem; line-height: 1;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, opacity .15s ease;
+}
+.carousel.is-ready .carousel__btn { display: grid; }
+.carousel__btn:hover { background: var(--ink); color: var(--paper); }
+.carousel__btn:disabled { opacity: 0.3; cursor: default; }
+.carousel__btn:disabled:hover { background: var(--paper); color: var(--ink); }
+.carousel__btn--prev { left: 0.7rem; }
+.carousel__btn--next { right: 0.7rem; }
+
+.carousel__dots { display: flex; justify-content: center; gap: 0.55rem; margin-top: 1.1rem; }
+.carousel__dot {
+  width: 0.7rem; height: 0.7rem; padding: 0;
+  border: 1px solid var(--ink); background: transparent; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.carousel__dot[aria-current="true"] { background: var(--amber); border-color: var(--amber); }
 
 /* ---------- Footer ---------- */
 .footer {
@@ -208,7 +243,6 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
   .hero__media { order: -1; }
   .entry { grid-template-columns: 1fr; gap: 1.4rem; }
   .entry:nth-child(even) .entry__media { order: -1; }
-  .entry__gallery { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
