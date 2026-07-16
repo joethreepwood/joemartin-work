@@ -88,9 +88,6 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .ph__bar i{width:11px;height:11px;border-radius:50%;}
 .ph__bar .r{background:#ff5f57}.ph__bar .y{background:#febc2e}.ph__bar .g{background:#28c840}
 .ph__bar .url{margin-left:.5rem;font-family:var(--mono);font-size:.72rem;color:#565049;}
-.ph__tabs{display:flex;gap:.3rem;padding:.6rem .9rem 0;}
-.ph__tabs span{font-size:.78rem;padding:.4rem .8rem;border-radius:7px 7px 0 0;color:#6b655b;}
-.ph__tabs .on{background:#cf4200;color:#fff;font-weight:600;}
 .ph__body{display:grid;grid-template-columns:1.1fr 1fr;gap:1.6rem;padding:1.6rem;align-items:center;}
 .ph__text h2{font-family:var(--serif);font-size:2rem;margin-bottom:.6rem;}
 .ph__text p{font-size:.92rem;color:#403b33;margin:0 0 .8rem;}
@@ -223,7 +220,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 
 /* ============ 11 Editorial work — newsprint ============ */
 .news{background:#f3efe4;border:1px solid #d8d2c2;padding:1.9rem;
-      display:grid;grid-template-columns:1.15fr .85fr;gap:2rem;align-items:center;}
+      display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;}
 .news__mast{display:flex;align-items:center;gap:1rem;border-bottom:3px double #17140f;padding-bottom:.5rem;}
 .news__mast .name{font-family:var(--news);font-weight:900;font-size:1.5rem;}
 .news__mast .rule{flex:1;}
@@ -231,7 +228,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .news__byline{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:#5a5346;margin-bottom:1rem;}
 .news__cols{font-family:var(--serif);font-size:.94rem;line-height:1.55;color:#2b2820;}
 .news__cols p{margin:0 0 .8rem;}
-.news__media img{width:100%;border:1px solid #d8d2c2;box-shadow:0 12px 30px rgba(23,20,15,.18);display:block;}
+.news__media img{width:100%;border:1px solid #cfc8b6;border-radius:8px;box-shadow:0 16px 40px rgba(23,20,15,.22);display:block;}
 .news__go{display:inline-block;margin-top:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#b23b2e;text-decoration:none;border-bottom:1px solid #b23b2e;}
 
 /* ============ Carousel (used inside The Vigil) ============ */
