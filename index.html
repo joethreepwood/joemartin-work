@@ -18,7 +18,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Spectral:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=VT323&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -28,15 +28,12 @@
     ============================================================
     HOW TO EDIT THIS SITE
     ------------------------------------------------------------
-    - Each project is one <section class="entry">…</section>.
-      Index numbers are automatic (CSS counter) — just copy a
-      section to add a project, no renumbering needed.
-    - A wide section uses class "entry entry--wide"; it can hold a
-      .carousel of screenshots (see The Vigil). carousel.js wires up
-      the prev/next buttons and dots automatically for any .carousel.
-    - Colours/spacing live in the :root block at the top of style.css.
-    - Images are in the images folder. To embed (YouTube etc.), drop
-      an iframe inside a section's .entry__media in place of the image.
+    Each project is a <section class="sec"> whose inner card has its
+    own "world" style (app window, IKEA manual, CRT, newsprint…).
+    - Section styles live under clearly-labelled blocks in style.css.
+    - Shared frame (topbar, hero, section labels, footer) is at the top.
+    - Images are in the images folder; two sections embed YouTube.
+    - The Vigil carousel is wired up by carousel.js.
     ============================================================
   -->
 
@@ -44,7 +41,7 @@
     <a class="wordmark" href="#top">Joe Martin</a>
     <nav class="topbar__nav">
       <a class="topbar__link" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
-      <a class="btn btn--solid btn--sm" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+      <a class="tbtn" href="mailto:joemartinwords@gmail.com">Get in touch</a>
     </nav>
   </header>
 
@@ -52,297 +49,312 @@
 
   <!-- ===================== HERO ===================== -->
   <header class="hero">
-    <div class="hero__text">
-      <h1 class="hero__title">Hi, I&rsquo;m <span class="hl">Joe</span>.</h1>
-
-      <p>
-        I was an editor for the UK&rsquo;s biggest tech publications. Now I lead
-        marketing teams for fast-growing startups. I have 10+ years experience
-        spanning AI, SaaS, live events, B2C, and gaming. This is my personal
-        website and it&rsquo;s mostly about the latter.
-      </p>
-      <p>
-        I currently lead marketing at
-        <a href="https://posthog.com/" target="_blank" rel="noopener">PostHog</a>,
-        the product engineering platform. I also do freelance writing about games
-        and technology, as well as occasional startup advisory.
-      </p>
-      <p>
-        You can keep scrolling for some games and things, or just get in touch
-        directly.
-      </p>
-      <nav class="btns">
-        <a class="btn btn--solid" href="mailto:joemartinwords@gmail.com">Get in touch</a>
-        <a class="btn" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
-        <a class="btn" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
-      </nav>
-    </div>
-
-    <div class="hero__media">
-      <img src="images/hero.jpg" alt="">
+    <span class="hero__kick">Marketing for startups · recovering journalist</span>
+    <h1 class="hero__title">Hi, I&rsquo;m <em>Joe.</em></h1>
+    <div class="hero__cols">
+      <div>
+        <p>
+          I was an editor for the UK&rsquo;s biggest tech publications. Now I lead
+          marketing teams for fast-growing startups. I have 10+ years experience
+          spanning AI, SaaS, live events, B2C, and gaming. This is my personal
+          website and it&rsquo;s mostly about the latter.
+        </p>
+        <p>
+          I currently lead marketing at
+          <a href="https://posthog.com/" target="_blank" rel="noopener">PostHog</a>,
+          the product engineering platform. I also do freelance writing about games
+          and technology, as well as occasional startup advisory.
+        </p>
+        <p>
+          You can keep scrolling for some games and things, or just get in touch
+          directly. Every project below is shown as the kind of thing it actually is.
+        </p>
+        <nav class="btns">
+          <a class="btn btn--solid" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+          <a class="btn" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
+          <a class="btn" href="https://github.com/joethreepwood" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+      </div>
     </div>
   </header>
 
   <main>
 
-    <!-- PostHog -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/posthog.png" alt="PostHog">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>PostHog</h2>
-        <p>
-          I joined PostHog as the first marketing hire, back when all it did was
-          analytics. Now, I lead the marketing team, we&rsquo;re building every
-          tool developers need to ship better products, and we&rsquo;re valued at
-          over $1.6bn.
-        </p>
-        <p>
-          Teams at PostHog wear many hats, so I&rsquo;ve done everything from
-          launching our startup program to shipping product features like the
-          in-app roadmap. I also built the foundations of our content, demand gen,
-          customer support, partnerships, and product marketing teams.
-        </p>
-        <a class="cta" href="https://posthog.com/community/profiles/29070" target="_blank" rel="noopener">My PostHog profile</a>
-      </div>
-    </section>
-
-    <!-- DeskHog -->
-    <section class="entry entry--video">
-      <div class="entry__media">
-        <div class="video">
-          <iframe src="https://www.youtube-nocookie.com/embed/8hMfu3kXR20" title="DeskHog" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-        </div>
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>DeskHog</h2>
-        <p>
-          I&rsquo;ve worked on a lot of projects at PostHog, but DeskHog is one of
-          my favourites.
-        </p>
-        <p>
-          DeskHog is a tiny open-source micro-computer made in Danilo Campos&rsquo;
-          basement and forced into reality as part of PostHog&rsquo;s Do More Weird
-          ethos. The basic idea was: &ldquo;What if PostHog made a tamagotchi?&rdquo;
-        </p>
-        <p>
-          I led the hackathon team that built all the launch software (including
-          three games of my own) and then led the marketing and release. We ended up
-          hitting Hacker News and selling out in less than an hour.
-        </p>
-        <a class="cta" href="https://posthog.com/deskhog" target="_blank" rel="noopener">Get a DeskHog</a>
-      </div>
-    </section>
-
-    <!-- Pollen -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/pollen.webp" alt="Pollen">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Pollen</h2>
-        <p>
-          I joined Pollen as the second marketing hire, back when it was called
-          Verve and just did B2B marketing for music festivals. By the time I left
-          it had rebranded twice and had raised over $630m in funding.
-        </p>
-        <p>
-          At Pollen I worked mostly on the B2B and brand side of the business, so
-          when we acquired teams such as Campus Vacations and JusCollege I led the
-          merging of the brands and marketing teams. Admittedly, things didn&rsquo;t
-          end well for Pollen, but I only found out about that years after I left.
-        </p>
-        <a class="cta" href="https://www.bbc.co.uk/iplayer/episode/m001n327/crashed-800m-festival-fail" target="_blank" rel="noopener">Watch the BBC documentary</a>
-      </div>
-    </section>
-
-    <!-- Laundrapp -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/laundrapp.jpg" alt="Laundrapp">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Laundrapp</h2>
-        <p>
-          I joined Laundrapp as the second marketing hire, back before it had
-          launched or even had a proper name. It was an on-demand laundry app,
-          which doesn&rsquo;t sound very sexy but was a lot of fun to build back in
-          2014.
-        </p>
-        <p>
-          Laundrapp launched first in London, so my job as content marketer was to
-          spread the awareness. This often involved stunts, such as extreme ironing
-          across the city, which helped us grow beyond just London. When I left we
-          were expanding internationally and working on a successful exit.
-        </p>
-        <a class="cta" href="https://www.laundryheap.com/en-gb/laundrapp" target="_blank" rel="noopener">We got acquired by these guys</a>
-      </div>
-    </section>
-
-    <!-- The Vigil -->
-    <section class="entry">
-      <div class="entry__media">
-        <div class="carousel" data-carousel tabindex="0" aria-roledescription="carousel" aria-label="The Vigil screenshots">
-          <div class="carousel__track" data-track>
-            <figure class="carousel__slide"><img src="images/vigil-stranger.png" alt="The Vigil — an encounter: a cloaked figure on the path"></figure>
-            <figure class="carousel__slide"><img src="images/vigil-camp.png" alt="The Vigil — the camp: speaking with Brell the hedge-witch"></figure>
-            <figure class="carousel__slide"><img src="images/vigil-door.png" alt="The Vigil — an encounter: a woman nailing her own door shut"></figure>
-            <figure class="carousel__slide"><img src="images/vigil-map.png" alt="The Vigil — approaching the castle across a grid of tiles"></figure>
+    <!-- ============ 01 PostHog — app window ============ -->
+    <section class="sec">
+      <div class="label"><span>01</span><span>PostHog — <b>the product</b></span></div>
+      <div class="ph">
+        <div class="ph__bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url">app.posthog.com</span></div>
+        <div class="ph__tabs"><span class="on">Overview</span><span>Roadmap</span><span>Team</span></div>
+        <div class="ph__body">
+          <div class="ph__text">
+            <h2>PostHog</h2>
+            <p>
+              I joined PostHog as the first marketing hire, back when all it did was
+              analytics. Now, I lead the marketing team, we&rsquo;re building every
+              tool developers need to ship better products, and we&rsquo;re valued at
+              over $1.6bn.
+            </p>
+            <p>
+              Teams at PostHog wear many hats, so I&rsquo;ve done everything from
+              launching our startup program to shipping product features like the
+              in-app roadmap. I also built the foundations of our content, demand gen,
+              customer support, partnerships, and product marketing teams.
+            </p>
+            <div class="ph__metrics">
+              <div><b>$1.6bn</b><span>valuation</span></div>
+              <div><b>1st</b><span>marketing hire</span></div>
+            </div>
+            <a class="ph__go" href="https://posthog.com/community/profiles/29070" target="_blank" rel="noopener">My PostHog profile →</a>
           </div>
-          <button class="carousel__btn carousel__btn--prev" type="button" data-prev aria-label="Previous screenshot">&lsaquo;</button>
-          <button class="carousel__btn carousel__btn--next" type="button" data-next aria-label="Next screenshot">&rsaquo;</button>
-          <div class="carousel__dots" data-dots></div>
+          <div class="ph__shot"><img src="images/posthog.png" alt="PostHog" loading="lazy"></div>
         </div>
       </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>The Vigil</h2>
-        <p>
-          I like making micro-games and one-off pieces just for me. This is one of
-          them &ndash; something to play while I wait for others to join a call, or
-          whatever. It runs on a Pimoroni Presto, which I have on my desktop.
-        </p>
-        <p>
-          The Vigil is an idle turn-based RPG about a knight travelling through a
-          plague-ridden kingdom in search of a citadel. Each turn is an encounter
-          where you choose between honourable (risky), cunning (unpredictable), or
-          craven (safe) responses. Along the way you recruit companions who may
-          reveal backstories if your choices align to their values. There&rsquo;s
-          also a tiny turn-based immersive sim built-in too.
-        </p>
-        <a class="cta" href="https://github.com/joethreepwood/joe-vigil-game" target="_blank" rel="noopener">Check the repo</a>
+    </section>
+
+    <!-- ============ 02 DeskHog — IKEA manual ============ -->
+    <section class="sec">
+      <div class="label"><span>02</span><span>DeskHog — <b>assembly required</b></span></div>
+      <div class="ik">
+        <div class="ik__top"><span class="lg">DESKHOG</span><span class="pg">AA·1337 · pg 1/1</span></div>
+        <div class="ik__body">
+          <div class="ik__steps">
+            <h2>DeskHog</h2>
+            <div class="step"><span class="n">1</span><p>I&rsquo;ve worked on a lot of projects at PostHog, but DeskHog is one of my favourites.</p></div>
+            <div class="step"><span class="n">2</span><p>DeskHog is a tiny open-source micro-computer made in Danilo Campos&rsquo; basement and forced into reality as part of PostHog&rsquo;s Do More Weird ethos. The basic idea was: &ldquo;What if PostHog made a tamagotchi?&rdquo;</p></div>
+            <div class="step"><span class="n">3</span><p>I led the hackathon team that built all the launch software (including three games of my own) and then led the marketing and release. We ended up hitting Hacker News and selling out in less than an hour.</p></div>
+            <div class="ik__marks"><span class="yes">✓ Hit Hacker News</span><span class="yes">✓ Sold out &lt; 1 hr</span></div>
+            <a class="ik__btn" href="https://posthog.com/deskhog" target="_blank" rel="noopener">Get a DeskHog</a>
+          </div>
+          <div class="ik__diagram">
+            <div class="ik__screen video"><iframe src="https://www.youtube-nocookie.com/embed/8hMfu3kXR20" title="DeskHog" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+            <div class="ik__fig">FIG 1. — a tiny open-source micro-computer</div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Unlimited Hyperbole -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/unlimited-hyperbole.jpg" alt="Unlimited Hyperbole">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Unlimited Hyperbole</h2>
-        <p>
-          Unlimited Hyperbole was a games podcast which ran for four seasons. The
-          idea was to turn the usual rambling structure of games podcasts on its
-          head and cut long, multi-hour interviews down to an intensely focused
-          format.
-        </p>
-        <p>
-          Guests included
-          <a href="https://en.wikipedia.org/wiki/Kieron_Gillen" target="_blank" rel="noopener">Kieron Gillen</a>,
-          <a href="https://blendogames.com/about.htm" target="_blank" rel="noopener">Brendon Chung</a>,
-          <a href="https://www.mobygames.com/person/9913/jordan-thomas/" target="_blank" rel="noopener">Jordan Thomas</a>,
-          <a href="https://littlelostpoly.com/" target="_blank" rel="noopener">Rob Briscoe</a>,
-          <a href="https://en.wikipedia.org/wiki/Tom_Jubert" target="_blank" rel="noopener">Tom Jubert</a>,
-          <a href="https://www.danpinchbeck.co.uk/" target="_blank" rel="noopener">Dan Pinchbeck</a>,
-          and loads more. It was created in collaboration with
-          <a href="https://www.linkedin.com/in/harijones/" target="_blank" rel="noopener">Harriet Jones</a>
-          and produced out of my bedroom.
-        </p>
-        <p>
-          The Escapist and Metro both labelled it as the best games podcast of the
-          year, but most episodes have since been lost to the aether.
-        </p>
-        <a class="cta" href="https://podcasts.apple.com/gb/podcast/unlimited-hyperbole/id530142743" target="_blank" rel="noopener">Listen to the show</a>
+    <!-- ============ 03 Pollen — neon on foliage ============ -->
+    <section class="sec">
+      <div class="label"><span>03</span><span>Pollen — <b>the brand</b></span></div>
+      <div class="pol">
+        <div class="pol__raised"><b>$630m</b><span>raised</span></div>
+        <div class="pol__in">
+          <h2>Pollen</h2>
+          <p>
+            I joined Pollen as the second marketing hire, back when it was called
+            Verve and just did B2B marketing for music festivals. By the time I left
+            it had rebranded twice and had raised over $630m in funding.
+          </p>
+          <p>
+            At Pollen I worked mostly on the B2B and brand side of the business, so
+            when we acquired teams such as Campus Vacations and JusCollege I led the
+            merging of the brands and marketing teams. Admittedly, things didn&rsquo;t
+            end well for Pollen, but I only found out about that years after I left.
+          </p>
+          <a class="pol__go" href="https://www.bbc.co.uk/iplayer/episode/m001n327/crashed-800m-festival-fail" target="_blank" rel="noopener">Watch the BBC documentary →</a>
+        </div>
       </div>
     </section>
 
-    <!-- Split Decision -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/split-decision.jpg" alt="Split Decision">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Split Decision</h2>
-        <p>
-          Split Decision was a mobile game I worked on as a copywriter, researcher,
-          and UX specialist. It was published by Mental Floss Magazine.
-        </p>
-        <p>
-          Essentially a quiz game, Split Decision asked you to choose between
-          obscure choices like: Is Boccob a type of potato, or a deity in Dungeons
-          &amp; Dragons? or Is Curse of the Wererabbit a Bafta winner, or a Razzie
-          winner?
-        </p>
-        <p>
-          It was fun to work on and Starbucks selected it as a free app of the day,
-          back when those things mattered. They even made a board game version of
-          it, but I didn&rsquo;t work on that and haven&rsquo;t ever actually played
-          it. Oh well.
-        </p>
-        <a class="cta" href="https://boardgamegeek.com/boardgame/81486/split-decision" target="_blank" rel="noopener">Buy the board game</a>
-      </div>
-    </section>
-
-    <!-- Fractured Skyline -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/fractured-skyline.jpg" alt="Fractured Skyline">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Fractured Skyline</h2>
-        <p>
-          Fractured Skyline was a mobile game by Preliminal Games which I worked on
-          as a lead writer. Players acted as the CEO of a corporation and would
-          fight others in a strategy game with CCG elements.
-        </p>
-        <p>
-          The game featured a geolocation mechanic that built procedural maps based
-          on the players&rsquo; actual location. In 2015 it won the
-          <a href="https://masschallenge.org/startup/preliminal-games" target="_blank" rel="noopener">UK Diamond MassChallenge Award</a>.
-        </p>
-        <p>
-          The game unfortunately never launched, as our ambitions were a bit ahead
-          of our abilities. We did produce a concept trailer to shop around to
-          publishers though, but were ultimately unsuccessful in securing funding
-          for the project.
-        </p>
-        <a class="cta" href="https://www.youtube.com/watch?v=hjC2buMLlDI" target="_blank" rel="noopener">Watch the trailer</a>
+    <!-- ============ 04 Laundrapp — app store card ============ -->
+    <section class="sec">
+      <div class="label"><span>04</span><span>Laundrapp — <b>on the App Store</b></span></div>
+      <div class="la">
+        <div class="la__l">
+          <div class="la__head">
+            <div class="la__icon">🧺</div>
+            <div><h2>Laundrapp</h2><span class="la__sub">On-demand laundry · London</span></div>
+          </div>
+          <p>
+            I joined Laundrapp as the second marketing hire, back before it had
+            launched or even had a proper name. It was an on-demand laundry app,
+            which doesn&rsquo;t sound very sexy but was a lot of fun to build back in
+            2014.
+          </p>
+          <p>
+            Laundrapp launched first in London, so my job as content marketer was to
+            spread the awareness. This often involved stunts, such as extreme ironing
+            across the city, which helped us grow beyond just London. When I left we
+            were expanding internationally and working on a successful exit.
+          </p>
+          <a class="la__get" href="https://www.laundryheap.com/en-gb/laundrapp" target="_blank" rel="noopener">We got acquired by these guys →</a>
+        </div>
+        <div class="la__r"><img src="images/laundrapp.jpg" alt="Laundrapp — extreme ironing on the Tube" loading="lazy"></div>
       </div>
     </section>
 
-    <!-- Crywankface -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/crywankface.jpg" alt="Crywankface in PC Gamer magazine">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
-        <h2>Crywankface</h2>
-        <p>
-          Crywankface was a regrettable game I made with Craig Lager. It began as a
-          drunken joke about Crytek&rsquo;s Warface and launched 24 hours later.
-        </p>
-        <p>
-          Despite being crude in every sense, Crywankface nevertheless found
-          critical acclaim. It was covered in RPS, Vice, and PC Gamer Magazine
-          &ndash; the latter of which called it one of their favourite indie games
-          of the month. Baffling.
-        </p>
-        <p>
-          Crywankface isn&rsquo;t the sort of thing I&rsquo;d normally mention on a
-          portfolio, but people seem to like it. Fans even made their own Pico-8
-          port of the original. No, I don&rsquo;t know why.
-        </p>
-        <a class="cta" href="https://rogue-ai.itch.io/crywankface" target="_blank" rel="noopener">Play Crywankface</a>
+    <!-- ============ 05 The Vigil — CRT game panel (with carousel) ============ -->
+    <section class="sec">
+      <div class="label"><span>05</span><span>The Vigil — <b>as the game it is</b></span></div>
+      <div class="crt">
+        <div class="crt__txt">
+          <h2>THE VIGIL</h2>
+          <p>
+            I like making micro-games and one-off pieces just for me. This is one of
+            them &ndash; something to play while I wait for others to join a call, or
+            whatever. It runs on a Pimoroni Presto, which I have on my desktop.
+          </p>
+          <p>
+            The Vigil is an idle turn-based RPG about a knight travelling through a
+            plague-ridden kingdom in search of a citadel. Each turn is an encounter
+            where you choose between honourable (risky), cunning (unpredictable), or
+            craven (safe) responses. Along the way you recruit companions who may
+            reveal backstories if your choices align to their values. There&rsquo;s
+            also a tiny turn-based immersive sim built-in too.
+          </p>
+          <div class="crt__choices"><span class="honour">HONOUR</span><span class="cunning">CUNNING</span><span class="craven">CRAVEN</span></div>
+          <a class="crt__go" href="https://github.com/joethreepwood/joe-vigil-game" target="_blank" rel="noopener">&gt; Check the repo</a>
+        </div>
+        <div class="crt__view">
+          <div class="carousel" data-carousel tabindex="0" aria-roledescription="carousel" aria-label="The Vigil screenshots">
+            <div class="carousel__track" data-track>
+              <figure class="carousel__slide"><img src="images/vigil-stranger.png" alt="The Vigil — an encounter: a cloaked figure on the path"></figure>
+              <figure class="carousel__slide"><img src="images/vigil-camp.png" alt="The Vigil — the camp: speaking with Brell the hedge-witch"></figure>
+              <figure class="carousel__slide"><img src="images/vigil-door.png" alt="The Vigil — an encounter: a woman nailing her own door shut"></figure>
+              <figure class="carousel__slide"><img src="images/vigil-map.png" alt="The Vigil — approaching the castle across a grid of tiles"></figure>
+            </div>
+            <button class="carousel__btn carousel__btn--prev" type="button" data-prev aria-label="Previous screenshot">&lsaquo;</button>
+            <button class="carousel__btn carousel__btn--next" type="button" data-next aria-label="Next screenshot">&rsaquo;</button>
+            <div class="carousel__dots" data-dots></div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Games preservation -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/games-preservation.png" alt="Speaking at VideoBrains">
+    <!-- ============ 06 Unlimited Hyperbole — podcast player ============ -->
+    <section class="sec">
+      <div class="label"><span>06</span><span>Unlimited Hyperbole — <b>as a podcast</b></span></div>
+      <div class="pod">
+        <div class="pod__player">
+          <div class="pod__art"><img src="images/unlimited-hyperbole.jpg" alt="Unlimited Hyperbole" loading="lazy"></div>
+          <div class="pod__meta">
+            <h2>Unlimited Hyperbole</h2>
+            <div class="pod__sub">Games podcast · four seasons</div>
+            <div class="pod__bar"><a class="pod__play" href="https://podcasts.apple.com/gb/podcast/unlimited-hyperbole/id530142743" target="_blank" rel="noopener" aria-label="Listen">▶</a><span class="pod__track"></span><span class="pod__time">31:12</span></div>
+          </div>
+        </div>
+        <div class="pod__notes">
+          <p>
+            Unlimited Hyperbole was a games podcast which ran for four seasons. The
+            idea was to turn the usual rambling structure of games podcasts on its
+            head and cut long, multi-hour interviews down to an intensely focused
+            format.
+          </p>
+          <p>
+            Guests included
+            <a href="https://en.wikipedia.org/wiki/Kieron_Gillen" target="_blank" rel="noopener">Kieron Gillen</a>,
+            <a href="https://blendogames.com/about.htm" target="_blank" rel="noopener">Brendon Chung</a>,
+            <a href="https://www.mobygames.com/person/9913/jordan-thomas/" target="_blank" rel="noopener">Jordan Thomas</a>,
+            <a href="https://littlelostpoly.com/" target="_blank" rel="noopener">Rob Briscoe</a>,
+            <a href="https://en.wikipedia.org/wiki/Tom_Jubert" target="_blank" rel="noopener">Tom Jubert</a>,
+            <a href="https://www.danpinchbeck.co.uk/" target="_blank" rel="noopener">Dan Pinchbeck</a>,
+            and loads more. It was created in collaboration with
+            <a href="https://www.linkedin.com/in/harijones/" target="_blank" rel="noopener">Harriet Jones</a>
+            and produced out of my bedroom.
+          </p>
+          <p>
+            The Escapist and Metro both labelled it as the best games podcast of the
+            year, but most episodes have since been lost to the aether.
+          </p>
+          <a class="pod__go" href="https://podcasts.apple.com/gb/podcast/unlimited-hyperbole/id530142743" target="_blank" rel="noopener">Listen to the show →</a>
+        </div>
       </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
+    </section>
+
+    <!-- ============ 07 Split Decision — quiz ============ -->
+    <section class="sec">
+      <div class="label"><span>07</span><span>Split Decision — <b>play along</b></span></div>
+      <div class="quiz">
+        <div class="quiz__card">
+          <div class="quiz__q">Is Boccob a type of potato, or a deity in Dungeons &amp; Dragons?</div>
+          <div class="quiz__opts"><span class="opt a">A · A type of potato</span><span class="opt b">B · A D&amp;D deity</span></div>
+        </div>
+        <div class="quiz__text">
+          <h2>Split Decision</h2>
+          <p>
+            Split Decision was a mobile game I worked on as a copywriter, researcher,
+            and UX specialist. It was published by Mental Floss Magazine.
+          </p>
+          <p>
+            Essentially a quiz game, Split Decision asked you to choose between
+            obscure choices like: Is Boccob a type of potato, or a deity in Dungeons
+            &amp; Dragons? or Is Curse of the Wererabbit a Bafta winner, or a Razzie
+            winner?
+          </p>
+          <p>
+            It was fun to work on and Starbucks selected it as a free app of the day,
+            back when those things mattered. They even made a board game version of
+            it, but I didn&rsquo;t work on that and haven&rsquo;t ever actually played
+            it. Oh well.
+          </p>
+          <a class="quiz__go" href="https://boardgamegeek.com/boardgame/81486/split-decision" target="_blank" rel="noopener">Buy the board game →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 08 Fractured Skyline — cyberpunk ============ -->
+    <section class="sec">
+      <div class="label"><span>08</span><span>Fractured Skyline — <b>press start</b></span></div>
+      <div class="cy">
+        <div class="cy__text">
+          <h2>Fractured Skyline</h2>
+          <p>
+            Fractured Skyline was a mobile game by Preliminal Games which I worked on
+            as a lead writer. Players acted as the CEO of a corporation and would
+            fight others in a strategy game with CCG elements.
+          </p>
+          <p>
+            The game featured a geolocation mechanic that built procedural maps based
+            on the players&rsquo; actual location. In 2015 it won the
+            <a href="https://masschallenge.org/startup/preliminal-games" target="_blank" rel="noopener">UK Diamond MassChallenge Award</a>.
+          </p>
+          <p>
+            The game unfortunately never launched, as our ambitions were a bit ahead
+            of our abilities. We did produce a concept trailer to shop around to
+            publishers though, but were ultimately unsuccessful in securing funding
+            for the project.
+          </p>
+          <div class="cy__badge">◆ UK Diamond MassChallenge ’15</div>
+          <a class="cy__go" href="https://www.youtube.com/watch?v=hjC2buMLlDI" target="_blank" rel="noopener">Watch the trailer →</a>
+        </div>
+        <div class="cy__frame video"><iframe src="https://www.youtube-nocookie.com/embed/hjC2buMLlDI" title="Fractured Skyline trailer" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+      </div>
+    </section>
+
+    <!-- ============ 09 Crywankface — itch.io page ============ -->
+    <section class="sec">
+      <div class="label"><span>09</span><span>Crywankface — <b>on itch.io</b></span></div>
+      <div class="itch">
+        <div class="itch__cover"><img src="images/crywankface.jpg" alt="Crywankface in PC Gamer magazine" loading="lazy"></div>
+        <div class="itch__r">
+          <h2>Crywankface</h2>
+          <div class="itch__by">by Joe Martin &amp; Craig Lager · free</div>
+          <a class="itch__play" href="https://rogue-ai.itch.io/crywankface" target="_blank" rel="noopener">▸ Play Crywankface</a>
+          <div class="itch__tags"><span>indie</span><span>comedy</span><span>regrettable</span></div>
+          <p>
+            Crywankface was a regrettable game I made with Craig Lager. It began as a
+            drunken joke about Crytek&rsquo;s Warface and launched 24 hours later.
+          </p>
+          <p>
+            Despite being crude in every sense, Crywankface nevertheless found
+            critical acclaim. It was covered in RPS, Vice, and PC Gamer Magazine
+            &ndash; the latter of which called it one of their favourite indie games
+            of the month. Baffling.
+          </p>
+          <p>
+            Crywankface isn&rsquo;t the sort of thing I&rsquo;d normally mention on a
+            portfolio, but people seem to like it. Fans even made their own Pico-8
+            port of the original. No, I don&rsquo;t know why.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 10 Games preservation — archive case file ============ -->
+    <section class="sec">
+      <div class="label"><span>10</span><span>Games preservation — <b>from the archive</b></span></div>
+      <div class="arc">
         <h2>Games preservation</h2>
         <p>
           I&rsquo;m passionate about games preservation as a topic and have joined a
@@ -366,34 +378,35 @@
           <a href="https://www.eurogamer.net/origin-systems-unmade-games-and-rejected-ideas" target="_blank" rel="noopener">abandoned games of Origin Systems</a>
           for Eurogamer and others.
         </p>
-        <a class="cta" href="https://www.eurogamer.net/authors/joe-martin" target="_blank" rel="noopener">Check the archives</a>
+        <a class="arc__go" href="https://www.eurogamer.net/authors/joe-martin" target="_blank" rel="noopener">Check the archives →</a>
       </div>
     </section>
 
-    <!-- Editorial work -->
-    <section class="entry">
-      <div class="entry__media">
-        <img src="images/editorial.png" alt="Joe Martin's Custom PC column">
-      </div>
-      <div class="entry__body">
-        <span class="entry__no"></span>
+    <!-- ============ 11 Editorial work — newsprint ============ -->
+    <section class="sec">
+      <div class="label"><span>11</span><span>Editorial work — <b>hot off the press</b></span></div>
+      <div class="news">
+        <div class="news__mast"><span class="name">Joe Martin</span><span class="rule"></span></div>
         <h2>Editorial work</h2>
-        <p>
-          Back when I still had hair, I used to write for tech magazines and
-          websites such as PC Gamer, PC Format, Bit-tech.net, PC Pro,
-          TrustedReviews, Den of Geek, Gamer Network, and many more.
-        </p>
-        <p>
-          I was senior editor for Dennis Publishing&rsquo;s games brands and had a
-          regular column in Custom PC Magazine covering trends in games media.
-        </p>
-        <p>
-          I&rsquo;ve written tech coverage for The Guardian, Sky, Conde Nast, Vice,
-          and Future Publishing. I was a regular expert guest for BBC Radio 4&rsquo;s
-          GameON show with Adam Rosser. I still do occasional freelance writing, if
-          you&rsquo;re interested.
-        </p>
-        <a class="cta" href="https://www.eurogamer.net/authors/joe-martin" target="_blank" rel="noopener">Selected works</a>
+        <div class="news__byline">By Joe Martin · Senior Editor, Dennis Publishing</div>
+        <div class="news__cols">
+          <p>
+            Back when I still had hair, I used to write for tech magazines and
+            websites such as PC Gamer, PC Format, Bit-tech.net, PC Pro,
+            TrustedReviews, Den of Geek, Gamer Network, and many more.
+          </p>
+          <p>
+            I was senior editor for Dennis Publishing&rsquo;s games brands and had a
+            regular column in Custom PC Magazine covering trends in games media.
+          </p>
+          <p>
+            I&rsquo;ve written tech coverage for The Guardian, Sky, Conde Nast, Vice,
+            and Future Publishing. I was a regular expert guest for BBC Radio 4&rsquo;s
+            GameON show with Adam Rosser. I still do occasional freelance writing, if
+            you&rsquo;re interested.
+          </p>
+        </div>
+        <a class="news__go" href="https://www.eurogamer.net/authors/joe-martin" target="_blank" rel="noopener">Selected works →</a>
       </div>
     </section>
 
