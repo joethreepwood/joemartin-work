@@ -38,10 +38,25 @@
   -->
 
   <header class="topbar">
-    <a class="wordmark" href="#top">Joe Martin</a>
-    <nav class="topbar__nav">
-      <a class="topbar__link" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
-      <a class="tbtn" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+    <div class="topbar__row">
+      <a class="wordmark" href="#top">Joe Martin</a>
+      <nav class="topbar__nav">
+        <a class="topbar__link" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
+        <a class="tbtn" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+      </nav>
+    </div>
+    <nav class="secnav" aria-label="Jump to section">
+      <a href="#posthog">PostHog</a>
+      <a href="#deskhog">DeskHog</a>
+      <a href="#pollen">Pollen</a>
+      <a href="#laundrapp">Laundrapp</a>
+      <a href="#vigil">The Vigil</a>
+      <a href="#hyperbole">Unlimited Hyperbole</a>
+      <a href="#split-decision">Split Decision</a>
+      <a href="#fractured-skyline">Fractured Skyline</a>
+      <a href="#crywankface">Crywankface</a>
+      <a href="#preservation">Games preservation</a>
+      <a href="#editorial">Editorial</a>
     </nav>
   </header>
 
@@ -81,8 +96,8 @@
   <main>
 
     <!-- ============ 01 PostHog — app window ============ -->
-    <section class="sec">
-      <div class="label"><span>01</span><span>PostHog — <b>the product</b></span></div>
+    <section class="sec" id="posthog">
+      <div class="label"><span>01</span></div>
       <div class="ph">
         <div class="ph__bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url" aria-hidden="true">app.posthog.com</span></div>
         <div class="ph__tabs"><span class="on">Overview</span><span>Roadmap</span><span>Team</span></div>
@@ -113,30 +128,28 @@
     </section>
 
     <!-- ============ 02 DeskHog — IKEA manual ============ -->
-    <section class="sec">
-      <div class="label"><span>02</span><span>DeskHog — <b>assembly required</b></span></div>
+    <section class="sec" id="deskhog">
+      <div class="label"><span>02</span></div>
       <div class="ik">
-        <div class="ik__top"><span class="lg">DESKHOG</span><span class="pg">AA·1337 · pg 1/1</span></div>
+        <div class="ik__top"><span class="lg">DESKHOG</span></div>
         <div class="ik__body">
           <div class="ik__steps">
             <h2>DeskHog</h2>
             <div class="step"><span class="n">1</span><p>I&rsquo;ve worked on a lot of projects at PostHog, but DeskHog is one of my favourites.</p></div>
             <div class="step"><span class="n">2</span><p>DeskHog is a tiny open-source micro-computer made in Danilo Campos&rsquo; basement and forced into reality as part of PostHog&rsquo;s Do More Weird ethos. The basic idea was: &ldquo;What if PostHog made a tamagotchi?&rdquo;</p></div>
             <div class="step"><span class="n">3</span><p>I led the hackathon team that built all the launch software (including three games of my own) and then led the marketing and release. We ended up hitting Hacker News and selling out in less than an hour.</p></div>
-            <div class="ik__marks"><span class="yes">✓ Hit Hacker News</span><span class="yes">✓ Sold out &lt; 1 hr</span></div>
             <a class="ik__btn" href="https://posthog.com/deskhog" target="_blank" rel="noopener">Get a DeskHog</a>
           </div>
           <div class="ik__diagram">
             <div class="ik__screen video"><iframe src="https://www.youtube-nocookie.com/embed/8hMfu3kXR20" title="DeskHog" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
-            <div class="ik__fig">FIG 1. — a tiny open-source micro-computer</div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ============ 03 Pollen — neon on foliage ============ -->
-    <section class="sec">
-      <div class="label"><span>03</span><span>Pollen — <b>the brand</b></span></div>
+    <section class="sec" id="pollen">
+      <div class="label"><span>03</span></div>
       <div class="pol">
         <div class="pol__raised"><b>$630m</b><span>raised</span></div>
         <div class="pol__in">
@@ -158,8 +171,8 @@
     </section>
 
     <!-- ============ 04 Laundrapp — app store card ============ -->
-    <section class="sec">
-      <div class="label"><span>04</span><span>Laundrapp — <b>on the App Store</b></span></div>
+    <section class="sec" id="laundrapp">
+      <div class="label"><span>04</span></div>
       <div class="la">
         <div class="la__l">
           <div class="la__head">
@@ -185,8 +198,8 @@
     </section>
 
     <!-- ============ 05 The Vigil — CRT game panel (with carousel) ============ -->
-    <section class="sec">
-      <div class="label"><span>05</span><span>The Vigil — <b>as the game it is</b></span></div>
+    <section class="sec" id="vigil">
+      <div class="label"><span>05</span></div>
       <div class="crt">
         <div class="crt__txt">
           <h2>THE VIGIL</h2>
@@ -223,8 +236,8 @@
     </section>
 
     <!-- ============ 06 Unlimited Hyperbole — podcast player ============ -->
-    <section class="sec">
-      <div class="label"><span>06</span><span>Unlimited Hyperbole — <b>as a podcast</b></span></div>
+    <section class="sec" id="hyperbole">
+      <div class="label"><span>06</span></div>
       <div class="pod">
         <div class="pod__player">
           <div class="pod__art"><img src="images/unlimited-hyperbole.jpg" alt="Unlimited Hyperbole" loading="lazy"></div>
@@ -263,13 +276,9 @@
     </section>
 
     <!-- ============ 07 Split Decision — quiz ============ -->
-    <section class="sec">
-      <div class="label"><span>07</span><span>Split Decision — <b>play along</b></span></div>
+    <section class="sec" id="split-decision">
+      <div class="label"><span>07</span></div>
       <div class="quiz">
-        <div class="quiz__card">
-          <div class="quiz__q">Is Boccob a type of potato, or a deity in Dungeons &amp; Dragons?</div>
-          <div class="quiz__opts"><span class="opt a">A · A type of potato</span><span class="opt b">B · A D&amp;D deity</span></div>
-        </div>
         <div class="quiz__text">
           <h2>Split Decision</h2>
           <p>
@@ -290,12 +299,21 @@
           </p>
           <a class="quiz__go" href="https://boardgamegeek.com/boardgame/81486/split-decision" target="_blank" rel="noopener">Buy the board game →</a>
         </div>
+        <div class="quiz__deck">
+          <div class="pcard pcard--back" aria-hidden="true"></div>
+          <div class="pcard pcard--front">
+            <span class="pip pip--tl" aria-hidden="true">?<br>&spades;</span>
+            <div class="pcard__q">Is Boccob a type of potato, or a deity in Dungeons &amp; Dragons?</div>
+            <div class="pcard__opts"><span><b>A</b> A type of potato</span><span><b>B</b> A D&amp;D deity</span></div>
+            <span class="pip pip--br" aria-hidden="true">?<br>&spades;</span>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ============ 08 Fractured Skyline — cyberpunk ============ -->
-    <section class="sec">
-      <div class="label"><span>08</span><span>Fractured Skyline — <b>press start</b></span></div>
+    <section class="sec" id="fractured-skyline">
+      <div class="label"><span>08</span></div>
       <div class="cy">
         <div class="cy__text">
           <h2>Fractured Skyline</h2>
@@ -315,7 +333,6 @@
             publishers though, but were ultimately unsuccessful in securing funding
             for the project.
           </p>
-          <div class="cy__badge"><span aria-hidden="true">◆ </span>UK Diamond MassChallenge ’15</div>
           <a class="cy__go" href="https://www.youtube.com/watch?v=hjC2buMLlDI" target="_blank" rel="noopener">Watch the trailer →</a>
         </div>
         <div class="cy__frame video"><iframe src="https://www.youtube-nocookie.com/embed/hjC2buMLlDI" title="Fractured Skyline trailer" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
@@ -323,15 +340,14 @@
     </section>
 
     <!-- ============ 09 Crywankface — itch.io page ============ -->
-    <section class="sec">
-      <div class="label"><span>09</span><span>Crywankface — <b>on itch.io</b></span></div>
+    <section class="sec" id="crywankface">
+      <div class="label"><span>09</span></div>
       <div class="itch">
         <div class="itch__cover"><img src="images/crywankface.jpg" alt="Crywankface in PC Gamer magazine" loading="lazy"></div>
         <div class="itch__r">
           <h2>Crywankface</h2>
-          <div class="itch__by">by Joe Martin &amp; Craig Lager · free</div>
+          <div class="itch__by">by Joe Martin &amp; Craig Lager</div>
           <a class="itch__play" href="https://rogue-ai.itch.io/crywankface" target="_blank" rel="noopener"><span aria-hidden="true">▸ </span>Play Crywankface</a>
-          <div class="itch__tags"><span>indie</span><span>comedy</span><span>regrettable</span></div>
           <p>
             Crywankface was a regrettable game I made with Craig Lager. It began as a
             drunken joke about Crytek&rsquo;s Warface and launched 24 hours later.
@@ -352,10 +368,15 @@
     </section>
 
     <!-- ============ 10 Games preservation — archive case file ============ -->
-    <section class="sec">
-      <div class="label"><span>10</span><span>Games preservation — <b>from the archive</b></span></div>
+    <section class="sec" id="preservation">
+      <div class="label"><span>10</span></div>
       <div class="arc">
         <h2>Games preservation</h2>
+        <div class="arc__exhibits">
+          <figure><img src="images/preservation-shooter.png" alt="Pitch document: Shooter — Majestic Revelations, the early design that became Deus Ex" loading="lazy"><figcaption>Shooter: Majestic Revelations · 1997</figcaption></figure>
+          <figure><img src="images/preservation-thief.png" alt="Eidos game concept submission document for Thief 4: Dagger of Ways" loading="lazy"><figcaption>Thief 4: Dagger of Ways · Eidos, 2004</figcaption></figure>
+          <figure><img src="images/preservation-frontier.png" alt="Origin Systems pitch document for Frontier, an unmade old-west simulation" loading="lazy"><figcaption>Frontier · Origin Systems</figcaption></figure>
+        </div>
         <p>
           I&rsquo;m passionate about games preservation as a topic and have joined a
           number of initiatives to help further the cause.
@@ -383,8 +404,8 @@
     </section>
 
     <!-- ============ 11 Editorial work — newsprint ============ -->
-    <section class="sec">
-      <div class="label"><span>11</span><span>Editorial work — <b>hot off the press</b></span></div>
+    <section class="sec" id="editorial">
+      <div class="label"><span>11</span></div>
       <div class="news">
         <div class="news__mast"><span class="name">Joe Martin</span><span class="rule"></span></div>
         <h2>Editorial work</h2>
