@@ -171,6 +171,16 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
 .cta::after { content: "\2192"; letter-spacing: 0; }
 .cta:hover { color: var(--amber); border-color: var(--amber); gap: 0.8rem; }
 
+/* ---------- Video embed (sits inside .entry__media, like an image) ---------- */
+.video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ink);
+  box-shadow: 0 14px 34px rgba(23,20,15,0.22);
+  background: #05070c;
+}
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+
 /* ---------- Carousel (sits inside .entry__media, beside the text) ---------- */
 .carousel { position: relative; }
 .carousel__track {
