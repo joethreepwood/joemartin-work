@@ -66,7 +66,14 @@ h1, h2 {
   font-family: var(--display); font-weight: 600; font-size: 1.3rem;
   color: var(--ink); text-decoration: none; letter-spacing: -0.01em;
 }
-.topbar__tag { font-size: 0.68rem; color: var(--ink-2); }
+.topbar__nav { display: flex; align-items: center; gap: clamp(0.8rem, 2vw, 1.6rem); }
+.topbar__link {
+  font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.16em; color: var(--ink); text-decoration: none;
+  transition: color .15s ease;
+}
+.topbar__link:hover { color: var(--amber); }
+.btn--sm { padding: 0.5rem 0.85rem; font-size: 0.66rem; }
 
 /* ---------- Buttons / links ---------- */
 .btns { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
@@ -115,7 +122,7 @@ h1, h2 {
 }
 
 /* ---------- Project entries ---------- */
-main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem); }
+main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem); counter-reset: entry; }
 
 .entry {
   display: grid;
@@ -124,6 +131,7 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
   align-items: center;
   padding: clamp(2.75rem, 6vw, 4.5rem) 0;
   border-top: 1px solid var(--rule);
+  counter-increment: entry;
 }
 
 /* alternate image side */
@@ -146,6 +154,7 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
   background: var(--amber); vertical-align: middle; margin-right: 0.6rem;
   margin-bottom: 0.2rem;
 }
+.entry__no::after { content: counter(entry, decimal-leading-zero); }
 .entry__body h2 { font-size: clamp(1.8rem, 4vw, 2.7rem); margin: 0 0 1.1rem; }
 .entry__body p { margin: 0 0 1rem; color: var(--ink-2); }
 .entry__body p a { color: var(--teal); text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -161,6 +170,21 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
 }
 .cta::after { content: "\2192"; letter-spacing: 0; }
 .cta:hover { color: var(--amber); border-color: var(--amber); gap: 0.8rem; }
+
+/* ---------- Wide gallery entry (e.g. The Vigil) ---------- */
+.entry--wide { display: block; }
+.entry--wide .entry__body { max-width: 66ch; margin-bottom: clamp(1.5rem, 3vw, 2.4rem); }
+.entry__gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+}
+.entry__gallery img {
+  width: 100%;
+  border: 1px solid var(--ink);
+  box-shadow: 0 12px 30px rgba(23,20,15,0.20);
+  background: #05070c;
+}
 
 /* ---------- Footer ---------- */
 .footer {
@@ -184,6 +208,7 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
   .hero__media { order: -1; }
   .entry { grid-template-columns: 1fr; gap: 1.4rem; }
   .entry:nth-child(even) .entry__media { order: -1; }
+  .entry__gallery { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -29,7 +29,10 @@
     HOW TO EDIT THIS SITE
     ------------------------------------------------------------
     - Each project is one <section class="entry">…</section>.
-      Copy one to add a project; give it the next index number.
+      Index numbers are automatic (CSS counter) — just copy a
+      section to add a project, no renumbering needed.
+    - A wide, gallery-style section uses class "entry entry--wide"
+      with an .entry__gallery of images (see The Vigil).
     - Colours/spacing live in the :root block at the top of style.css.
     - Images are in the images folder. To embed (YouTube etc.), drop
       an iframe inside a section's .entry__media in place of the image.
@@ -38,7 +41,10 @@
 
   <header class="topbar">
     <a class="wordmark" href="#top">Joe Martin</a>
-    <span class="topbar__tag">Marketing&nbsp;for&nbsp;startups</span>
+    <nav class="topbar__nav">
+      <a class="topbar__link" href="https://www.linkedin.com/in/joemartinwords/" target="_blank" rel="noopener">LinkedIn</a>
+      <a class="btn btn--solid btn--sm" href="mailto:joemartinwords@gmail.com">Get in touch</a>
+    </nav>
   </header>
 
   <a id="top"></a>
@@ -84,7 +90,7 @@
         <img src="images/posthog.png" alt="PostHog">
       </div>
       <div class="entry__body">
-        <span class="entry__no">01</span>
+        <span class="entry__no"></span>
         <h2>PostHog</h2>
         <p>
           I joined PostHog as the first marketing hire, back when all it did was
@@ -108,7 +114,7 @@
         <img src="images/pollen.webp" alt="Pollen">
       </div>
       <div class="entry__body">
-        <span class="entry__no">02</span>
+        <span class="entry__no"></span>
         <h2>Pollen</h2>
         <p>
           I joined Pollen as the second marketing hire, back when it was called
@@ -131,7 +137,7 @@
         <img src="images/laundrapp.jpg" alt="Laundrapp">
       </div>
       <div class="entry__body">
-        <span class="entry__no">03</span>
+        <span class="entry__no"></span>
         <h2>Laundrapp</h2>
         <p>
           I joined Laundrapp as the second marketing hire, back before it had
@@ -149,13 +155,41 @@
       </div>
     </section>
 
+    <!-- The Vigil -->
+    <section class="entry entry--wide">
+      <div class="entry__body">
+        <span class="entry__no"></span>
+        <h2>The Vigil</h2>
+        <p>
+          I like making micro-games and one-off pieces just for me. This is one of
+          them &ndash; something to play while I wait for others to join a call, or
+          whatever. It runs on a Pimoroni Presto, which I have on my desktop.
+        </p>
+        <p>
+          The Vigil is an idle turn-based RPG about a knight travelling through a
+          plague-ridden kingdom in search of a citadel. Each turn is an encounter
+          where you choose between honourable (risky), cunning (unpredictable), or
+          craven (safe) responses. Along the way you recruit companions who may
+          reveal backstories if your choices align to their values. There&rsquo;s
+          also a tiny turn-based immersive sim built-in too.
+        </p>
+        <a class="cta" href="https://github.com/joethreepwood/joe-vigil-game" target="_blank" rel="noopener">Check the repo</a>
+      </div>
+      <div class="entry__gallery">
+        <img src="images/vigil-map.png" alt="The Vigil — approaching the castle across a grid of tiles" loading="lazy">
+        <img src="images/vigil-door.png" alt="The Vigil — an encounter: a woman nailing her own door shut" loading="lazy">
+        <img src="images/vigil-stranger.png" alt="The Vigil — an encounter: a cloaked figure on the path" loading="lazy">
+        <img src="images/vigil-camp.png" alt="The Vigil — the camp: speaking with Brell the hedge-witch" loading="lazy">
+      </div>
+    </section>
+
     <!-- Unlimited Hyperbole -->
     <section class="entry">
       <div class="entry__media">
         <img src="images/unlimited-hyperbole.jpg" alt="Unlimited Hyperbole">
       </div>
       <div class="entry__body">
-        <span class="entry__no">04</span>
+        <span class="entry__no"></span>
         <h2>Unlimited Hyperbole</h2>
         <p>
           Unlimited Hyperbole was a games podcast which ran for four seasons. The
@@ -189,7 +223,7 @@
         <img src="images/split-decision.jpg" alt="Split Decision">
       </div>
       <div class="entry__body">
-        <span class="entry__no">05</span>
+        <span class="entry__no"></span>
         <h2>Split Decision</h2>
         <p>
           Split Decision was a mobile game I worked on as a copywriter, researcher,
@@ -217,7 +251,7 @@
         <img src="images/fractured-skyline.jpg" alt="Fractured Skyline">
       </div>
       <div class="entry__body">
-        <span class="entry__no">06</span>
+        <span class="entry__no"></span>
         <h2>Fractured Skyline</h2>
         <p>
           Fractured Skyline was a mobile game by Preliminal Games which I worked on
@@ -245,7 +279,7 @@
         <img src="images/crywankface.jpg" alt="Crywankface in PC Gamer magazine">
       </div>
       <div class="entry__body">
-        <span class="entry__no">07</span>
+        <span class="entry__no"></span>
         <h2>Crywankface</h2>
         <p>
           Crywankface was a regrettable game I made with Craig Lager. It began as a
@@ -272,7 +306,7 @@
         <img src="images/games-preservation.png" alt="Speaking at VideoBrains">
       </div>
       <div class="entry__body">
-        <span class="entry__no">08</span>
+        <span class="entry__no"></span>
         <h2>Games preservation</h2>
         <p>
           I&rsquo;m passionate about games preservation as a topic and have joined a
@@ -306,7 +340,7 @@
         <img src="images/editorial.png" alt="Joe Martin's Custom PC column">
       </div>
       <div class="entry__body">
-        <span class="entry__no">09</span>
+        <span class="entry__no"></span>
         <h2>Editorial work</h2>
         <p>
           Back when I still had hair, I used to write for tech magazines and
