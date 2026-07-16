@@ -180,6 +180,13 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem)
   background: #05070c;
 }
 .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+/* Give the video entry a wider media column so a 16:9 clip reaches
+   roughly the same height as the (taller) still images. Tracks are
+   positional, so bias whichever side the media sits on. */
+@media (min-width: 781px) {
+  .entry--video { grid-template-columns: 1.32fr 0.68fr; }              /* media on left (odd) */
+  .entry--video:nth-child(even) { grid-template-columns: 0.68fr 1.32fr; } /* media on right (even) */
+}
 
 /* ---------- Carousel (sits inside .entry__media, beside the text) ---------- */
 .carousel { position: relative; }
