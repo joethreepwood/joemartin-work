@@ -140,7 +140,8 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .la{display:grid;grid-template-columns:1fr 1fr;border-radius:16px;overflow:hidden;background:#0a6299;color:#fff;box-shadow:0 18px 44px rgba(10,98,153,.32);}
 .la__l{padding:2rem;}
 .la__head{display:flex;align-items:center;gap:.9rem;margin-bottom:1rem;}
-.la__icon{width:56px;height:56px;border-radius:14px;background:#fff;color:#0a6299;display:grid;place-items:center;font-size:1.6rem;box-shadow:0 6px 16px rgba(0,0,0,.15);flex:0 0 auto;}
+.la__icon{width:60px;height:60px;border-radius:14px;overflow:hidden;flex:0 0 auto;box-shadow:0 6px 16px rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.25);}
+.la__icon img{width:100%;height:100%;object-fit:cover;display:block;}
 .la h2{font-weight:800;font-size:2rem;line-height:1;}
 .la__sub{font-size:.78rem;color:#e8f5ff;}
 .la p{color:#f2faff;font-size:.9rem;margin:0 0 .8rem;}
