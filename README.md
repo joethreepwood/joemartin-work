@@ -18,7 +18,7 @@ My personal site. Plain HTML/CSS, no build step, hosted free on GitHub Pages.
 
 A turn-based tactics game that runs in the browser. It's a separate page, since
 it needs the whole viewport and mustn't scroll — [`game.html`](game.html),
-[`game.css`](game.css), [`game.js`](game.js). Section 12 of `index.html` links
+[`game.css`](game.css), [`game.js`](game.js). Section 07 of `index.html` links
 to it. Same rules as the rest of the site: no build step, no dependencies.
 
 `game.js` is one IIFE split into numbered sections (config, RNG, data, rules,
@@ -45,7 +45,17 @@ squeeze through a corner gap: if both tiles flanking the step block sight, the
 shot stops. Don't mix the two distance functions up; `cheb` is for range,
 falloff, cover and "adjacent", `dist` is for walking.
 
-On the interface side, three conventions worth preserving:
+Difficulty comes from two places. The budget in `buildLevel` scales with the
+sector number, and — every second sector — **the hostiles draft a requisition
+before you do**. Each entry in `REWARDS` therefore has both a `run` (what it does
+for your squad) and a `foe` (what it does for theirs), and whatever they take is
+removed from your three options. Their picks accumulate on `G.foe`, get applied
+when enemies are built, and are priced into the budget so individually tougher
+hostiles means slightly fewer of them. `canSolve` still gates every level, so the
+guarantee holds automatically as the drafts stack up — but if you change the
+`foe` effects, re-run the generator harness below rather than assuming.
+
+On the interface side, four conventions worth preserving:
 
 - **Every committing action is two-stage.** The first click on a tile *arms* an
   intent (`G.ui.pending`) and shows the numbers; the second click on the same
@@ -63,6 +73,15 @@ On the interface side, three conventions worth preserving:
   Black for labels, IBM Plex Mono for figures. The neon glow is reserved for the
   board itself, which is the only place it means anything. If you add UI, add it
   in that language rather than reaching for another gradient.
+- **Phones get compact content, portrait gets a docked sheet.** Two independent
+  media queries, mirrored in JS by `isCompact()` and `isDocked()`. Compact
+  (≤820px, any orientation) swaps the full dossier for `renderSheet()` — who,
+  two figures, one warning, the confirm bar — because reflowing the desktop
+  panel clipped the confirm bar off the bottom. Docked (≤820px *and* portrait)
+  puts it in the flex flow at a fixed height so it reserves its own space and
+  the board never reflows; in landscape height is the scarce axis, so it floats
+  beside the board instead. `placeTip` measures against `.tac-app`, not
+  `.stagewrap` — the panel is a sibling of the board, not a child.
 
 To sanity-check the generator after edits, `game.js` exports its internals under
 Node (invisible in browsers), so you can hammer it headlessly:
@@ -92,8 +111,9 @@ console.log(g.canSolve(s));   // must be true for every shipped level
 - Game events: `game_started`, `sector_started` (includes `gen_attempts` and
   `gen_fallback`, so the solvability guarantee can be checked against real
   players), `sector_cleared`, `upgrade_taken`, `hostile_killed` / `operative_lost`
-  with a `cause` (`void`, `blast`, `frag`, `shock`, `impact`, `gunfire`,
-  `self_detonate`), and `squad_lost`.
+  with a `cause` (`void`, `blast`, `frag`, `shock`, `shrapnel`, `impact`,
+  `gunfire`, `self_detonate`), `hostiles_drafted` (which requisition they took),
+  and `squad_lost`.
 
 Two things to keep in mind when editing:
 

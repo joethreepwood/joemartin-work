@@ -1,7 +1,7 @@
 /* ============================================================
    joemartin.work — "every section its own world"
    A shared frame (topbar, hero, section labels, footer) holds
-   eleven bespoke section cards, each styled as the kind of thing
+   twelve bespoke section cards, each styled as the kind of thing
    the project actually is. Plain CSS, no build step.
    ============================================================ */
 
@@ -241,7 +241,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .news__media img{width:100%;border:1px solid #cfc8b6;border-radius:8px;box-shadow:0 16px 40px rgba(23,20,15,.22);display:block;}
 .news__go{display:inline-block;margin-top:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#b23b2e;text-decoration:none;border-bottom:1px solid #b23b2e;}
 
-/* ============ 12 Null Sector — neon tactics grid ============ */
+/* ============ 07 Null Sector — neon tactics grid ============ */
 .tac{position:relative;border-radius:14px;overflow:hidden;padding:2rem;color:#eafcff;border:1px solid #35204d;
      background:radial-gradient(120% 130% at 85% 0%, #1b1140, #08060f 70%);
      display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;align-items:center;}
