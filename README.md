@@ -36,6 +36,19 @@ worth knowing before changing it:
   keeps a bad streak from making a sector unwinnable — don't make the
   environment random.
 
+On the interface side, two conventions worth preserving:
+
+- **Every committing action is two-stage.** The first click on a tile *arms* an
+  intent (`G.ui.pending`) and shows the numbers; the second click on the same
+  tile commits it. `resolveIntent` is the single place that decides what a click
+  means, and `previewShot` is the single place that describes the outcome — so
+  the panel, the on-board markers and the committed result can't disagree.
+- **To-hit lives on the board.** `drawOdds` runs last in `draw()`, after the
+  enemy intent labels, because both want the same strip of pixels and the
+  player's own odds must win. Combat numbers used to live in the bottom status
+  bar, where `text-overflow: ellipsis` silently cut off the hit chance — don't
+  put anything load-bearing back there.
+
 To sanity-check the generator after edits, `game.js` exports its internals under
 Node (invisible in browsers), so you can hammer it headlessly:
 

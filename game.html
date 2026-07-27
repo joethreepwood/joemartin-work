@@ -34,12 +34,15 @@
       </div>
       <div class="hud__right">
         <span class="hud__turn" data-turn>TURN 1</span>
+        <button class="hud__help" type="button" data-help aria-label="How to play">?</button>
       </div>
     </header>
 
     <!-- the board -->
     <div class="stagewrap">
       <canvas id="stage" data-stage aria-label="Tactics grid. Mouse only." role="img"></canvas>
+      <!-- contextual inspector: weapon stats, to-hit, move/action state -->
+      <div class="tip" data-tip hidden></div>
     </div>
 
     <!-- bottom HUD: squad + actions -->

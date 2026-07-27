@@ -77,6 +77,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
   box-shadow:0 0 16px rgba(138,255,192,.4);}
 .btn-end:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 0 22px rgba(138,255,192,.7);}
 .btn-end:disabled{background:#2a2440;color:#6a6390;box-shadow:none;cursor:default;}
+/* everyone's spent — nudge toward ending the turn */
+.btn-end--ready:not(:disabled){background:linear-gradient(90deg,var(--pink),var(--cyan));
+  box-shadow:0 0 22px rgba(0,229,255,.55);}
 
 /* ---------- canvas ---------- */
 .stagewrap{flex:1 1 auto;min-height:0;display:grid;place-items:center;position:relative;overflow:hidden;}
@@ -122,6 +125,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
   box-shadow:0 0 22px rgba(0,229,255,.4);}
 .btn-neon:hover{transform:translateY(-1px);box-shadow:0 0 30px rgba(0,229,255,.7);}
 
+/* squad roster on the reward screen — shows what upgrades bought you */
+.roster{margin:.9rem 0 1.1rem;padding:.6rem .7rem;border:1px solid var(--edge);border-radius:9px;
+  background:rgba(0,229,255,.04);text-align:left;}
+.roster__row{display:flex;gap:.6rem;align-items:baseline;font-family:var(--mono);font-size:.66rem;line-height:1.7;}
+.roster__row dt{flex:0 0 3.6rem;color:var(--cyan);font-weight:600;letter-spacing:.06em;}
+.roster__row dd{margin:0;color:#cfc7e6;}
+.roster__perks{display:block;color:var(--mint);font-size:.62rem;}
+
 /* reward choices */
 .rewards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;margin-top:1.2rem;}
 .reward{display:flex;flex-direction:column;gap:.4rem;padding:1rem .7rem;cursor:pointer;
@@ -132,6 +143,50 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
 .reward__name{font-family:var(--mono);font-size:.72rem;font-weight:600;color:var(--cyan);letter-spacing:.04em;}
 .reward__desc{font-family:var(--mono);font-size:.64rem;color:var(--dim);line-height:1.4;}
 @media(max-width:520px){ .rewards{grid-template-columns:1fr;} }
+
+/* ---------- contextual inspector ----------
+   The old single-line status strip truncated exactly the numbers that
+   matter (to-hit, damage), so combat info lives here instead: a panel
+   that can wrap, anchored near whatever you're pointing at. */
+.tip{position:absolute;z-index:12;pointer-events:none;min-width:190px;max-width:270px;
+  border:1px solid var(--edge);border-radius:9px;padding:.55rem .65rem;
+  background:rgba(10,7,22,.96);backdrop-filter:blur(4px);
+  box-shadow:0 10px 30px rgba(0,0,0,.6);font-family:var(--mono);}
+.tip[hidden]{display:none;}
+.tip__head{display:flex;align-items:baseline;gap:.4rem;margin-bottom:.35rem;}
+.tip__name{font-family:var(--pixel);font-size:1.15rem;line-height:1;letter-spacing:.03em;color:var(--cyan);}
+.tip__name--foe{color:var(--pink);}
+.tip__name--neutral{color:var(--warn);}
+.tip__sub{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);}
+.tip__row{display:flex;justify-content:space-between;gap:.6rem;font-size:.66rem;line-height:1.55;}
+.tip__row dt{color:var(--dim);letter-spacing:.06em;text-transform:uppercase;}
+.tip__row dd{margin:0;color:#eafcff;font-weight:600;text-align:right;}
+.tip__row dd b{color:var(--mint);}
+.tip__row dd s{color:var(--dim);text-decoration:none;font-weight:400;}
+.tip__stats{margin:0;}
+.tip__note{margin:.35rem 0 0;font-size:.62rem;line-height:1.5;color:#b9b0d6;}
+.tip__warn{margin-top:.35rem;font-size:.63rem;line-height:1.45;color:var(--warn);}
+.tip__kill{margin-top:.35rem;font-size:.66rem;line-height:1.45;color:var(--mint);font-weight:600;}
+.tip__perks{margin-top:.4rem;padding-top:.35rem;border-top:1px solid rgba(154,144,192,.25);
+  font-size:.61rem;line-height:1.5;color:var(--mint);}
+.tip__confirm{margin-top:.45rem;padding:.3rem .45rem;border-radius:6px;text-align:center;
+  font-size:.63rem;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+  background:rgba(138,255,192,.14);border:1px solid var(--mint);color:var(--mint);}
+.tip__confirm--danger{background:rgba(255,45,149,.14);border-color:var(--pink);color:var(--pink);}
+
+/* availability indicators, shared by chips and the inspector */
+.av{display:inline-flex;gap:3px;align-items:center;}
+.av i{width:9px;height:9px;border-radius:2px;display:block;
+  border:1px solid rgba(154,144,192,.55);background:transparent;}
+.av i.on{background:var(--mint);border-color:var(--mint);box-shadow:0 0 6px rgba(138,255,192,.55);}
+.av i.act{border-radius:50%;}
+.chip__av{margin-left:.1rem;}
+.chip__perk{color:var(--warn);font-size:.6rem;}
+
+.hud__help{margin-left:.7rem;width:22px;height:22px;flex:0 0 auto;border-radius:50%;cursor:pointer;
+  background:transparent;border:1px solid var(--edge);color:var(--dim);
+  font-family:var(--mono);font-size:.7rem;line-height:1;transition:color .15s,border-color .15s;}
+.hud__help:hover{color:var(--cyan);border-color:var(--cyan);}
 
 /* tiny-window notice */
 .toosmall{position:absolute;inset:0;z-index:30;display:none;place-items:center;text-align:center;

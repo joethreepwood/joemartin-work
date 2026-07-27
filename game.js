@@ -66,11 +66,17 @@
   // ============================================================
   // 2. DATA
   // ============================================================
+  var BASE_HP = 5, BASE_MOVE = 3;
+
   var WEAPONS = {
-    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 2, dmgMax: 3, acc: 92,  falloff: 7,  kb: 1 },
-    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 3, dmgMax: 5, acc: 96,  falloff: 14, kb: 2 },
-    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 2, dmgMax: 3, acc: 88,  falloff: 4,  kb: 0, pierce: true },
-    shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 2, acc: 100, falloff: 0,  kb: 1, stun: true, electrify: true }
+    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 2, dmgMax: 3, acc: 92,  falloff: 7,  kb: 1,
+               blurb: 'All-rounder. Loses 7% accuracy per tile of distance.' },
+    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 3, dmgMax: 5, acc: 96,  falloff: 14, kb: 2,
+               blurb: 'Short range, big shove. The best tool for putting something in the void.' },
+    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 2, dmgMax: 3, acc: 88,  falloff: 4,  kb: 0, pierce: true,
+               blurb: 'Reaches across the board and pierces everything in the lane — including your own people.' },
+    shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 2, acc: 100, falloff: 0,  kb: 1, stun: true, electrify: true,
+               blurb: 'Adjacent only, but never misses. Stuns, and electrifies coolant the target is standing in.' }
   };
   var UPGRADE = { pistol: 'shotgun', shotgun: 'railgun' };  // railgun is the top of the chain
   var GRENADE = { name: 'Frag', range: 3, dmgMin: 2, dmgMax: 3, kb: 1 };
@@ -932,7 +938,7 @@
   // ============================================================
   // 9. RENDER — everything is drawn from state, every time.
   // ============================================================
-  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap;
+  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp;
 
   function neon(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur || 0; }
   function noNeon() { ctx.shadowBlur = 0; }
@@ -1110,11 +1116,17 @@
         var sh = shots[k];
         if (sh.kind === 'barrel') { ringCell(sh.x, sh.y, C.barrel, 2); continue; }
         // mint = you can hit this; pink reticles (below) = it can hit you
-        for (var q = 0; q < sh.hits.length; q++) reticle(sh.hits[q].x, sh.hits[q].y, sh.hits[q].side === 'enemy' ? C.mint : C.warn);
+        for (var q = 0; q < sh.hits.length; q++) {
+          var vt = sh.hits[q];
+          reticle(vt.x, vt.y, vt.side === 'enemy' ? C.mint : C.warn);
+        }
       }
       var ints = interactables(G, u);
       for (k = 0; k < ints.length; k++) ringCell(ints[k].x, ints[k].y, C.console, 2);
     }
+
+    // the armed (first-clicked) action, awaiting confirmation
+    drawPending(u);
     // walking preview
     if (G.ui.path && G.ui.path.length) {
       ctx.strokeStyle = C.ally; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
@@ -1127,6 +1139,123 @@
       var last = G.ui.path[G.ui.path.length - 1];
       ringCell(last.x, last.y, C.ally, 2);
     }
+  }
+
+  // Put the odds on the board, not just in a panel — this is the number that
+  // decides every shot. Drawn in its own pass, last, so an enemy intent label
+  // in the same strip can never hide it.
+  function drawOdds(u) {
+    if (!u || G.phase !== 'PLAYER' || u.hasActed || u.disabled || G.ui.mode === 'GRENADE') return;
+    var w = WEAPONS[u.weaponId], shots = shotsFrom(G, u.x, u.y, w);
+    for (var k = 0; k < shots.length; k++) {
+      if (shots[k].kind !== 'unit') continue;
+      for (var q = 0; q < shots[k].hits.length; q++) {
+        var vt = shots[k].hits[q];
+        if (vt.side !== 'enemy') continue;
+        var pct = hitChance(G, w, u.x, u.y, vt.x, vt.y);
+        odds(vt.x, vt.y, pct >= 100 ? 'SURE' : pct + '%', pct >= 85 ? C.mint : pct >= 60 ? C.ally : C.warn);
+      }
+    }
+  }
+
+  // keep a centred label fully on the board
+  function clampX(px, w) {
+    return Math.max(w / 2 + 1, Math.min(W * G.tile - w / 2 - 1, px));
+  }
+
+  // small odds badge under a target
+  function odds(x, y, text, color) {
+    var T = G.tile, py = y * T + T - 2;
+    ctx.font = 'bold ' + Math.round(T * .24) + 'px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    var w = ctx.measureText(text).width + 6;
+    var px = clampX(cx(x), w);
+    ctx.fillStyle = 'rgba(8,6,15,.85)';
+    ctx.fillRect(px - w / 2, py - T * .22, w, T * .22);
+    ctx.fillStyle = color;
+    ctx.fillText(text, px, py);
+  }
+
+  // The action the player has armed with their first click. Shows the outcome
+  // before they commit to it.
+  function drawPending(sel) {
+    var p = G.ui.pending;
+    if (!p || !sel) return;
+    var T = G.tile;
+
+    if (p.kind === 'move') {
+      // ghost of where they'd end up
+      ctx.save();
+      ctx.globalAlpha = .5;
+      ctx.strokeStyle = C.ally; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+      neon(C.ally, 12);
+      ctx.strokeRect(p.x * T + 3, p.y * T + 3, T - 6, T - 6);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      var gx = cx(p.x), gy = cy(p.y), r = T * .26;
+      ctx.moveTo(gx, gy - r); ctx.lineTo(gx + r * .82, gy + r * .72);
+      ctx.lineTo(gx, gy + r * .34); ctx.lineTo(gx - r * .82, gy + r * .72);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(0,229,255,.28)'; ctx.fill(); ctx.stroke();
+      noNeon(); ctx.restore();
+      confirmBadge(p.x, p.y, C.ally);
+      return;
+    }
+
+    if (p.kind === 'grenade') {
+      var cells = plus(p.x, p.y);
+      for (var i = 0; i < cells.length; i++) { fillCell(cells[i].x, cells[i].y, 'rgba(255,207,63,.34)'); ringCell(cells[i].x, cells[i].y, C.warn, 2); }
+      confirmBadge(p.x, p.y, C.warn);
+      return;
+    }
+
+    if (p.kind === 'interact') {
+      ringCell(p.x, p.y, C.console, 3);
+      confirmBadge(p.x, p.y, C.console);
+      return;
+    }
+
+    if (p.kind === 'shot') {
+      var pv = previewShot(sel, p.w, p.shot);
+      // bold trajectory
+      ctx.strokeStyle = C.mint; ctx.lineWidth = 3; neon(C.mint, 14);
+      ctx.beginPath(); ctx.moveTo(cx(sel.x), cy(sel.y)); ctx.lineTo(cx(p.x), cy(p.y)); ctx.stroke();
+      noNeon();
+      reticle(p.x, p.y, C.mint);
+      ringCell(p.x, p.y, C.mint, 2);
+
+      // where the shove puts them, and whether that is fatal
+      if (pv.kbKill && (pv.kbKill.x !== p.x || pv.kbKill.y !== p.y)) {
+        var kx = pv.kbKill.x, ky = pv.kbKill.y;
+        var fatal = pv.kbKill.result === 'void' || pv.kbKill.result === 'barrel';
+        var col = fatal ? C.mint : C.warn;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx(p.x), cy(p.y)); ctx.lineTo(cx(kx), cy(ky)); ctx.stroke();
+        ctx.setLineDash([]);
+        ringCell(kx, ky, col, 2);
+        if (fatal) {
+          ctx.fillStyle = col;
+          ctx.font = Math.round(T * .3) + 'px "VT323", monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(pv.kbKill.result === 'void' ? 'GONE' : 'BOOM', cx(kx), cy(ky));
+        }
+      }
+      confirmBadge(p.x, p.y, C.mint);
+    }
+  }
+
+  // The armed target pulses. The "click again" wording lives in the inspector
+  // panel only — an on-canvas badge collided with the enemy intent labels.
+  function confirmBadge(x, y, color) {
+    var T = G.tile, pulse = .5 + .5 * Math.sin(Date.now() / 170);
+    ctx.save();
+    ctx.globalAlpha = .45 + pulse * .55;
+    ctx.strokeStyle = color; ctx.lineWidth = 3;
+    neon(color, 16);
+    ctx.strokeRect(x * T + 2.5, y * T + 2.5, T - 5, T - 5);
+    noNeon();
+    ctx.restore();
   }
 
   function reticle(x, y, color) {
@@ -1169,11 +1298,16 @@
         ctx.beginPath(); ctx.moveTo(cx(from.x), cy(from.y)); ctx.lineTo(cx(it.tx), cy(it.ty)); ctx.stroke();
         noNeon();
         reticle(it.tx, it.ty, C.enemy);
-        ctx.fillStyle = C.enemy;
-        ctx.font = Math.round(T * .27) + 'px "VT323", monospace';
+        // boxed, so it stays readable over whatever is beneath it
+        ctx.font = 'bold ' + Math.round(T * .23) + 'px "IBM Plex Mono", monospace';
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         var lbl = (it.pct >= 100 ? 'SURE' : it.pct + '%') + ' · ' + it.dmg;
-        ctx.fillText(lbl, cx(it.tx), it.ty * T - 1);
+        var lw = ctx.measureText(lbl).width + 7;
+        var lx = clampX(cx(it.tx), lw);
+        ctx.fillStyle = 'rgba(8,6,15,.88)';
+        ctx.fillRect(lx - lw / 2, it.ty * T - T * .26, lw, T * .25);
+        ctx.fillStyle = C.enemy;
+        ctx.fillText(lbl, lx, it.ty * T - 2);
       }
       if (it.kind === 'detonate') {
         var cells = it.cells;
@@ -1190,6 +1324,31 @@
       ctx.fillStyle = full ? (u.side === 'player' ? C.mint : C.enemy) : 'rgba(255,255,255,.14)';
       ctx.fillRect(sx + i * (wid + gap), sy, wid, Math.max(3, T * .07));
     }
+  }
+
+  // Two markers under each operative: square = move, circle = action.
+  // Filled means still available this turn.
+  function actionPips(u) {
+    var T = G.tile, s = Math.max(4, T * .12), gap = Math.max(3, T * .06);
+    var y = u.ry * T + T - s - Math.max(2, T * .06);
+    var x0 = cx(u.rx) - (s * 2 + gap) / 2;
+    var canMove = !u.hasMoved && !u.disabled, canAct = !u.hasActed && !u.disabled;
+
+    ctx.lineWidth = 1.5;
+    // move (square)
+    ctx.beginPath();
+    ctx.rect(x0, y, s, s);
+    ctx.fillStyle = canMove ? C.mint : 'rgba(0,0,0,.35)';
+    ctx.strokeStyle = canMove ? C.mint : 'rgba(154,144,192,.7)';
+    if (canMove) neon(C.mint, 6);
+    ctx.fill(); ctx.stroke(); noNeon();
+    // action (circle)
+    ctx.beginPath();
+    ctx.arc(x0 + s + gap + s / 2, y + s / 2, s / 2, 0, Math.PI * 2);
+    ctx.fillStyle = canAct ? C.mint : 'rgba(0,0,0,.35)';
+    ctx.strokeStyle = canAct ? C.mint : 'rgba(154,144,192,.7)';
+    if (canAct) neon(C.mint, 6);
+    ctx.fill(); ctx.stroke(); noNeon();
   }
 
   function drawUnit(u) {
@@ -1268,6 +1427,7 @@
     }
     ctx.globalAlpha = 1;
     hpPips(u);
+    if (u.side === 'player') actionPips(u);
   }
 
   function drawFx() {
@@ -1306,6 +1466,7 @@
     drawIntents();
     var us = alive(G, 'player').concat(alive(G, 'enemy'));
     for (var i = 0; i < us.length; i++) drawUnit(us[i]);
+    drawOdds(selected());     // last, so nothing can cover the to-hit numbers
     drawFx();
     syncHud();
   }
@@ -1432,6 +1593,56 @@
   }
 
   // ============================================================
+  // 10b. SHOT PREVIEW — what will this shot actually do?
+  //      Used for the on-board badges, the inspector panel and nothing else:
+  //      the real outcome still comes from fire(), so this only ever needs to
+  //      describe, never decide.
+  // ============================================================
+  function previewShot(sel, w, shot) {
+    var out = { pct: 100, sure: false, targets: [], allies: 0, kbKill: null, barrel: false };
+    if (shot.kind === 'barrel') {
+      out.barrel = true;
+      out.blast = plus(shot.x, shot.y).filter(function (c) { return !!unitAt(G, c.x, c.y); }).length;
+      return out;
+    }
+    var dx = Math.sign(shot.x - sel.x), dy = Math.sign(shot.y - sel.y);
+    for (var i = 0; i < shot.hits.length; i++) {
+      var t = shot.hits[i];
+      if (t.side === 'player') { out.allies++; continue; }
+      var pct = hitChance(G, w, sel.x, sel.y, t.x, t.y);
+      out.pct = Math.min(out.pct, pct);
+      out.targets.push({ unit: t, pct: pct });
+
+      // Knockback is deterministic — say exactly where it ends up.
+      if (w.kb && !out.kbKill) {
+        var n = w.kb - (t.kbResist || 0), cx2 = t.x, cy2 = t.y, res = null;
+        for (var k = 0; k < n; k++) {
+          var nx = cx2 + dx, ny = cy2 + dy;
+          if (!inB(nx, ny) || blocksKnock(G, nx, ny)) {
+            res = (inB(nx, ny) && at(G, nx, ny).t === 'barrel') ? 'barrel' : 'wall';
+            break;
+          }
+          if (unitAt(G, nx, ny)) { res = 'unit'; break; }
+          cx2 = nx; cy2 = ny;
+          if (at(G, cx2, cy2).t === 'pit') { res = 'void'; break; }
+        }
+        out.kbKill = { result: res, x: cx2, y: cy2, tiles: n };
+      }
+    }
+    out.sure = out.pct >= 100;
+    return out;
+  }
+
+  // Does this shot kill for certain, no dice involved? That's the mechanic the
+  // whole game rests on, so it gets called out loudly wherever it applies.
+  function sureKill(pv) {
+    if (!pv.kbKill) return null;
+    if (pv.kbKill.result === 'void') return 'Shoved into the void — certain kill';
+    if (pv.kbKill.result === 'barrel') return 'Shoved into a barrel — it detonates';
+    return null;
+  }
+
+  // ============================================================
   // 11. HUD
   // ============================================================
   function selected() {
@@ -1445,9 +1656,10 @@
   var hudSig = null;
   function syncHud() {
     var sig = [G.level, G.turn, G.phase, G.ui.selId, G.ui.mode, G.grenades,
+      G.ui.pending ? G.ui.pending.key : '-',
       alive(G, 'enemy').length].concat(G.squad.map(function (m) {
         var u = byId(G, m.id);
-        return [m.name, m.weaponId, u ? u.hp : -1, u ? u.maxHp : -1,
+        return [m.name, m.weaponId, m.move, (m.perks || []).join('+'), u ? u.hp : -1, u ? u.maxHp : -1,
           u ? (u.hasMoved ? 1 : 0) + (u.hasActed ? 2 : 0) : 0, u ? u.disabled : 0].join('.');
       })).join('|');
     if (sig === hudSig) return;
@@ -1458,14 +1670,22 @@
 
     elSquad.innerHTML = '';
     G.squad.forEach(function (m) {
-      var u = byId(G, m.id);
+      var u = byId(G, m.id), w = WEAPONS[m.weaponId];
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip' + (G.ui.selId === m.id ? ' chip--sel' : '') + (u && u.hp > 0 ? (done(u) ? ' chip--done' : '') : ' chip--down');
       var pips = '';
       if (u) for (var i = 0; i < u.maxHp; i++) pips += '<i class="chip__pip' + (i < u.hp ? '' : ' chip__pip--empty') + '"></i>';
-      b.innerHTML = '<span class="chip__name">' + m.name + '</span><span class="chip__hp">' + pips +
-        '</span><span class="chip__wpn">' + WEAPONS[m.weaponId].name + '</span>';
+      var canMove = u && u.hp > 0 && !u.hasMoved && !u.disabled;
+      var canAct = u && u.hp > 0 && !u.hasActed && !u.disabled;
+      var perks = (m.perks && m.perks.length) ? '<span class="chip__perk" title="' + m.perks.join(', ') + '">★' + m.perks.length + '</span>' : '';
+      b.innerHTML = '<span class="chip__name">' + m.name + '</span>' +
+        '<span class="chip__hp">' + pips + '</span>' +
+        '<span class="chip__av av"><i class="' + (canMove ? 'on' : '') + '"></i><i class="act ' + (canAct ? 'on' : '') + '"></i></span>' +
+        '<span class="chip__wpn">' + w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + '</span>' + perks;
+      b.title = m.name + ' — ' + w.name + ': range ' + w.range + ', ' + w.dmgMin + '–' + w.dmgMax + ' damage, ' +
+        (w.acc >= 100 ? 'never misses' : w.acc + '% point blank') + (w.kb ? ', shoves ' + w.kb : '') +
+        (m.perks && m.perks.length ? '\nUpgrades: ' + m.perks.join(', ') : '');
       if (u && u.hp > 0) b.addEventListener('click', function () { selectUnit(m.id); });
       elSquad.appendChild(b);
     });
@@ -1476,14 +1696,28 @@
       var g = document.createElement('button');
       g.type = 'button';
       g.className = 'btn-act' + (G.ui.mode === 'GRENADE' ? ' btn-act--on' : '');
-      g.textContent = (G.ui.mode === 'GRENADE' ? 'Cancel' : 'Frag ×' + G.grenades);
+      g.textContent = (G.ui.mode === 'GRENADE' ? 'Cancel frag' : 'Frag ×' + G.grenades);
       g.addEventListener('click', function () {
         G.ui.mode = G.ui.mode === 'GRENADE' ? 'SELECT' : 'GRENADE';
-        G.ui.path = null; draw();
+        G.ui.path = null; G.ui.pending = null;
+        draw(); renderTip(G.ui.hover);
       });
       elActs.appendChild(g);
     }
     elEnd.disabled = G.phase !== 'PLAYER';
+
+    // How much of your turn is still unspent — the thing it's easiest to forget.
+    if (G.phase === 'PLAYER') {
+      var ops = alive(G, 'player');
+      var pend = ops.filter(function (o) { return !done(o) && !o.disabled; }).length;
+      elEnd.textContent = pend ? 'End turn' : 'End turn ✓';
+      elEnd.classList.toggle('btn-end--ready', !pend);
+      if (!G.ui.pending) {
+        msg(pend
+          ? pend + ' of ' + ops.length + ' still have something left'
+          : 'Everyone is spent — end the turn.');
+      }
+    }
   }
   function msg(t) { elMsg.textContent = t || ''; }
   function say(t) { elLive.textContent = t; }
@@ -1497,48 +1731,220 @@
     return inB(x, y) ? { x: x, y: y } : null;
   }
 
-  function hoverInfo(t) {
-    var sel = selected();
-    var u = unitAt(G, t.x, t.y);
-    if (G.ui.mode === 'GRENADE' && sel) {
-      return dist(sel.x, sel.y, t.x, t.y) <= GRENADE.range
-        ? 'FRAG · ' + GRENADE.dmgMin + '–' + GRENADE.dmgMax + ' to 5 tiles · always hits · shoves outward'
-        : 'Out of throwing range.';
+  // What would clicking this tile do? One place decides, so the preview, the
+  // inspector panel and the committed action can never disagree.
+  function resolveIntent(sel, t) {
+    if (!sel || !t || sel.disabled) return null;
+    var i;
+    if (G.ui.mode === 'GRENADE') {
+      if (sel.hasActed || G.grenades <= 0) return null;
+      if (dist(sel.x, sel.y, t.x, t.y) > GRENADE.range) return null;
+      return { kind: 'grenade', key: 'g:' + t.x + ',' + t.y, x: t.x, y: t.y };
     }
-    if (u && u.side === 'enemy') {
-      var def = ENEMIES[u.typeId], line = def.name.toUpperCase() + ' · ' + u.hp + '/' + u.maxHp + ' HP';
-      if (u.stunned) line += ' · STUNNED';
-      if (u.armed) line += ' · ABOUT TO DETONATE';
-      if (sel && !sel.hasActed) {
-        var w = WEAPONS[sel.weaponId], shots = shotsFrom(G, sel.x, sel.y, w), i;
-        for (i = 0; i < shots.length; i++) {
-          if (shots[i].kind !== 'unit') continue;
-          for (var k = 0; k < shots[i].hits.length; k++) {
-            if (shots[i].hits[k].id !== u.id) continue;
-            var pct = hitChance(G, w, sel.x, sel.y, u.x, u.y);
-            line += '  ►  ' + w.name.toUpperCase() + ' ' + (pct >= 100 ? 'SURE HIT' : pct + '%') +
-              ' · ' + w.dmgMin + '–' + w.dmgMax + ' DMG' + (w.kb ? ' · SHOVE ' + w.kb : '');
-            var allies = shots[i].hits.filter(function (h) { return h.side === 'player'; }).length;
-            if (allies) line += ' · HITS ' + allies + ' ALLY';
-          }
+    if (!sel.hasActed) {
+      var w = WEAPONS[sel.weaponId], shots = shotsFrom(G, sel.x, sel.y, w);
+      for (i = 0; i < shots.length; i++) {
+        var sh = shots[i];
+        var hit = (sh.kind === 'barrel' && sh.x === t.x && sh.y === t.y) ||
+          (sh.kind === 'unit' && sh.hits.some(function (h) { return h.x === t.x && h.y === t.y; }));
+        if (hit) return { kind: 'shot', key: 's:' + t.x + ',' + t.y, shot: sh, w: w, x: t.x, y: t.y };
+      }
+      var ints = interactables(G, sel);
+      for (i = 0; i < ints.length; i++) {
+        if (ints[i].x === t.x && ints[i].y === t.y) {
+          return { kind: 'interact', key: 'i:' + t.x + ',' + t.y, x: t.x, y: t.y, ikind: ints[i].kind };
         }
       }
-      return line;
     }
-    if (u && u.side === 'player') return u.name + ' · ' + u.hp + '/' + u.maxHp + ' HP · ' + WEAPONS[u.weaponId].name;
-    var tt = at(G, t.x, t.y);
-    if (tt.t === 'pit') return 'VOID — shove anything in here and it is gone. No dice.';
-    if (tt.t === 'barrel') return 'FUEL BARREL — shoot it or shove something into it. Blast ' + BLAST_DMG + ', chains.';
-    if (tt.t === 'water') return 'COOLANT — harmless until a console or shock prod electrifies it (' + SHOCK_DMG + ' dmg).';
-    if (tt.t === 'console') return tt.spent ? 'CONSOLE — burned out.' : 'CONSOLE — stand beside it and click to electrify every coolant pool.';
-    if (tt.t === 'door') return 'BLAST DOOR — stand beside it and click to ' + (tt.open ? 'seal' : 'open') + ' it.';
-    if (tt.t === 'wall') return 'BULKHEAD — blocks movement and line of fire.';
-    return '';
+    if (!sel.hasMoved && !unitAt(G, t.x, t.y) && !blocksMove(G, t.x, t.y)) {
+      var rm = reach(G, sel, sel.move), n = rm[t.y * 32 + t.x];
+      if (n && !(t.x === sel.x && t.y === sel.y)) {
+        return { kind: 'move', key: 'm:' + t.x + ',' + t.y, x: t.x, y: t.y, path: pathFrom(rm, t.x, t.y), steps: n.d };
+      }
+    }
+    return null;
+  }
+
+  function threatened(x, y) {
+    var es = alive(G, 'enemy');
+    for (var i = 0; i < es.length; i++) {
+      var it = es[i].intent;
+      if (!it || !it.cells) continue;
+      for (var c = 0; c < it.cells.length; c++) if (it.cells[c].x === x && it.cells[c].y === y) return es[i];
+    }
+    return null;
+  }
+
+  function perkList(u) {
+    var m = null;
+    for (var i = 0; i < G.squad.length; i++) if (G.squad[i].id === u.id) m = G.squad[i];
+    return (m && m.perks && m.perks.length) ? m.perks : null;
+  }
+
+  // Structured description of a tile, rendered into the inspector panel.
+  function describe(t) {
+    var sel = selected(), u = unitAt(G, t.x, t.y), tt = at(G, t.x, t.y);
+    var d = { rows: [], warn: [], kind: 'neutral', name: '', sub: '' };
+    var it = sel ? resolveIntent(sel, t) : null;
+    var armed = it && G.ui.pending && G.ui.pending.key === it.key;
+
+    if (u && u.side === 'enemy') {
+      var def = ENEMIES[u.typeId];
+      d.name = def.name; d.kind = 'foe'; d.sub = 'hostile';
+      d.rows.push(['HP', u.hp + ' / ' + u.maxHp]);
+      d.rows.push(['Move', def.move + ' tiles']);
+      d.rows.push(['Its attack', def.atk.range === 0
+        ? 'detonates for ' + def.atk.dmgMax
+        : def.atk.dmgMax + ' dmg · range ' + def.atk.range]);
+      if (def.kbResist) d.rows.push(['Braced', 'shrugs off ' + def.kbResist + ' tile of shove']);
+      if (u.stunned) d.warn.push('Stunned — it skips its next turn.');
+      if (u.armed) d.warn.push('Armed. It detonates on its next turn.');
+      if (u.intent && u.intent.kind === 'attack') {
+        var v = byId(G, u.intent.targetId);
+        d.warn.push('Plans to hit ' + (v ? v.name : 'someone') + ' for ' + u.intent.dmg +
+          (u.intent.pct >= 100 ? ' — certain.' : ' at ' + u.intent.pct + '%.'));
+      }
+    } else if (u && u.side === 'player') {
+      var wp = WEAPONS[u.weaponId];
+      d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
+      d.rows.push(['HP', u.hp + ' / ' + u.maxHp + (u.maxHp > BASE_HP ? '  (+' + (u.maxHp - BASE_HP) + ')' : '')]);
+      d.rows.push(['Move', u.move + ' tiles' + (u.move > BASE_MOVE ? '  (+' + (u.move - BASE_MOVE) + ')' : '')]);
+      d.rows.push(['Range', wp.range + (wp.range === 1 ? ' tile (adjacent)' : ' tiles')]);
+      d.rows.push(['Damage', wp.dmgMin + '–' + wp.dmgMax]);
+      d.rows.push(['Accuracy', wp.acc >= 100 ? 'never misses' : wp.acc + '% point blank' + (wp.falloff ? ', −' + wp.falloff + '%/tile' : '')]);
+      if (wp.kb) d.rows.push(['Shove', wp.kb + (wp.kb === 1 ? ' tile' : ' tiles')]);
+      if (wp.pierce) d.rows.push(['Pierce', 'hits the whole lane']);
+      d.avail = { move: !u.hasMoved && !u.disabled, act: !u.hasActed && !u.disabled };
+      d.note = wp.blurb;
+      d.perks = perkList(u);
+      if (u.disabled) d.warn.push('Hacked — cannot act this turn.');
+      var th = threatened(u.x, u.y);
+      if (th) d.warn.push('Standing in ' + ENEMIES[th.typeId].name + '’s line of fire.');
+    } else {
+      var TERRAIN = {
+        pit: ['Void', 'Anything shoved in here is gone. No dice.'],
+        barrel: ['Fuel barrel', 'Shoot it, or shove something into it. ' + BLAST_DMG + ' damage to five tiles, and it chains.'],
+        water: ['Coolant', 'Harmless until a console or shock prod electrifies it — then ' + SHOCK_DMG + ' damage to everything standing in it.'],
+        console: ['Console', tt.spent ? 'Burned out.' : 'Stand beside it and use it to electrify every coolant pool at once.'],
+        door: ['Blast door', tt.open ? 'Open. Stand beside it to seal it and cut a lane.' : 'Sealed. Stand beside it to open it.'],
+        wall: ['Bulkhead', 'Blocks movement and line of fire. Hugging one side-on gives cover.'],
+        floor: ['Deck', '']
+      };
+      var info = TERRAIN[tt.t] || TERRAIN.floor;
+      d.name = info[0];
+      d.note = info[1];
+    }
+
+    // ---- what the click would do ----
+    if (it && sel) {
+      if (it.kind === 'shot') {
+        var pv = previewShot(sel, it.w, it.shot);
+        d.rows.push(['—', '']);
+        if (pv.barrel) {
+          d.rows.push(['Shot', it.w.name + ' → barrel']);
+          d.rows.push(['To hit', 'always']);
+          d.rows.push(['Blast', BLAST_DMG + ' dmg to ' + pv.blast + ' unit' + (pv.blast === 1 ? '' : 's')]);
+        } else {
+          d.rows.push(['Shot', it.w.name]);
+          d.rows.push(['To hit', pv.sure ? 'certain' : pv.pct + '%']);
+          d.rows.push(['Damage', it.w.dmgMin + '–' + it.w.dmgMax]);
+          if (pv.kbKill) {
+            var r = pv.kbKill.result;
+            d.rows.push(['Shove', r === 'void' ? 'into the void'
+              : r === 'barrel' ? 'into a barrel'
+              : r === 'wall' ? 'into a wall (+' + BONK_DMG + ')'
+              : r === 'unit' ? 'into another unit (+' + BONK_DMG + ' each)'
+              : pv.kbKill.tiles + ' tile' + (pv.kbKill.tiles === 1 ? '' : 's')]);
+          }
+          if (pv.allies) d.warn.push('This lane also hits ' + pv.allies + ' of your own.');
+        }
+        d.kill = sureKill(pv);
+        d.confirm = { text: armed ? 'Click again to fire' : 'Click to aim', danger: !!pv.allies };
+      } else if (it.kind === 'grenade') {
+        d.name = 'Frag grenade'; d.kind = 'neutral'; d.sub = G.grenades + ' left';
+        d.rows = [['To hit', 'always'], ['Damage', GRENADE.dmgMin + '–' + GRENADE.dmgMax], ['Area', 'this tile + 4 around it'], ['Shove', '1 tile outward']];
+        var caught = plus(it.x, it.y).map(function (c) { return unitAt(G, c.x, c.y); }).filter(Boolean);
+        var mine = caught.filter(function (v) { return v.side === 'player'; }).length;
+        d.rows.push(['Caught', caught.length + ' unit' + (caught.length === 1 ? '' : 's')]);
+        if (mine) d.warn.push('Would also catch ' + mine + ' of your own.');
+        d.confirm = { text: armed ? 'Click again to throw' : 'Click to aim the frag', danger: !!mine };
+      } else if (it.kind === 'interact') {
+        d.confirm = { text: armed ? 'Click again to use it' : 'Click to use it', danger: false };
+      } else if (it.kind === 'move') {
+        d.rows.push(['—', '']);
+        d.rows.push(['Move here', it.steps + ' of ' + sel.move + ' tiles']);
+        var thr = threatened(it.x, it.y);
+        if (thr) d.warn.push('That tile is in ' + ENEMIES[thr.typeId].name + '’s planned attack.');
+        if (at(G, it.x, it.y).t === 'water') d.warn.push('Coolant — risky if anything electrifies it.');
+        d.confirm = { text: armed ? 'Click again to move' : 'Click to plan the move', danger: !!thr };
+      }
+    } else if (sel && u === sel) {
+      d.confirm = { text: 'Click a tile to move, a hostile to shoot', danger: false };
+    }
+    return d;
+  }
+
+  function renderTip(t) {
+    if (!t || G.phase !== 'PLAYER') { elTip.hidden = true; return; }
+    var d = describe(t);
+    // nothing worth a panel (an empty stretch of deck)
+    if (!d.rows.length && !d.confirm && !d.note && !d.warn.length) { elTip.hidden = true; return; }
+
+    var h = '<div class="tip__head"><span class="tip__name tip__name--' +
+      (d.kind === 'foe' ? 'foe' : d.kind === 'ally' ? 'ally' : 'neutral') + '">' + d.name + '</span>';
+    if (d.sub) h += '<span class="tip__sub">' + d.sub + '</span>';
+    h += '</div>';
+
+    if (d.avail) {
+      h += '<dl class="tip__stats"><div class="tip__row"><dt>Left this turn</dt><dd>' +
+        '<span class="av"><i class="' + (d.avail.move ? 'on' : '') + '" title="Move"></i>' +
+        '<i class="act ' + (d.avail.act ? 'on' : '') + '" title="Action"></i></span> ' +
+        (d.avail.move && d.avail.act ? 'move + action' : d.avail.move ? 'move only' : d.avail.act ? 'action only' : 'nothing') +
+        '</dd></div></dl>';
+    }
+    if (d.rows.length) {
+      h += '<dl class="tip__stats">';
+      d.rows.forEach(function (r) {
+        if (r[0] === '—') { h += '<div class="tip__row" style="height:.35rem"></div>'; return; }
+        h += '<div class="tip__row"><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>';
+      });
+      h += '</dl>';
+    }
+    if (d.kill) h += '<p class="tip__kill">' + d.kill + '</p>';
+    if (d.note) h += '<p class="tip__note">' + d.note + '</p>';
+    d.warn.forEach(function (w) { h += '<p class="tip__warn">' + w + '</p>'; });
+    if (d.perks) h += '<p class="tip__perks">Upgrades: ' + d.perks.join(', ') + '</p>';
+    if (d.confirm) h += '<div class="tip__confirm' + (d.confirm.danger ? ' tip__confirm--danger' : '') + '">' + d.confirm.text + '</div>';
+
+    elTip.innerHTML = h;
+    elTip.hidden = false;
+
+    // Prefer the empty space beside the board so the panel never covers tiles.
+    // Only overlay the board when the window is too narrow for a side gap.
+    var wrapR = wrap.getBoundingClientRect(), cvR = cv.getBoundingClientRect();
+    var offX = cvR.left - wrapR.left, offY = cvR.top - wrapR.top;
+    var tw = elTip.offsetWidth, th2 = elTip.offsetHeight;
+    var gapR = wrapR.width - (offX + cvR.width), gapL = offX;
+    var x, y = offY + Math.max(0, Math.min(t.y * G.tile - G.tile, cvR.height - th2));
+
+    if (gapR >= tw + 14) x = offX + cvR.width + 10;          // park in the right gap
+    else if (gapL >= tw + 14) x = offX - tw - 10;            // …or the left one
+    else {                                                   // no room: overlay, flipping side
+      x = offX + (t.x + 1) * G.tile + 10;
+      if (x + tw > wrapR.width - 4) x = offX + t.x * G.tile - tw - 10;
+    }
+    if (x < 4) x = 4;
+    if (x + tw > wrapR.width - 4) x = Math.max(4, wrapR.width - tw - 4);
+    if (y + th2 > wrapR.height - 4) y = wrapR.height - th2 - 4;
+    if (y < 4) y = 4;
+    elTip.style.left = Math.round(x) + 'px';
+    elTip.style.top = Math.round(y) + 'px';
   }
 
   function onMove(e) {
     if (!G || G.phase !== 'PLAYER') return;
     var t = tileFromEvent(e);
+    if (t && G.ui.hover && t.x === G.ui.hover.x && t.y === G.ui.hover.y) return;  // same tile, nothing to redo
     G.ui.hover = t;
     G.ui.path = null;
     if (t) {
@@ -1547,15 +1953,16 @@
         var rm = reach(G, sel, sel.move);
         if (rm[t.y * 32 + t.x]) G.ui.path = pathFrom(rm, t.x, t.y);
       }
-      msg(hoverInfo(t));
-    } else msg('');
+    }
     draw();
+    renderTip(t);
   }
 
   function selectUnit(id) {
     var u = byId(G, id);
     if (!u || u.hp <= 0) return;
-    G.ui.selId = id; G.ui.mode = 'SELECT'; G.ui.path = null;
+    G.ui.selId = id; G.ui.mode = 'SELECT'; G.ui.path = null; G.ui.pending = null;
+    msg('');
     draw();
   }
   function autoSelect() {
@@ -1574,72 +1981,72 @@
     draw();
   }
 
+  // Commit a previewed intent. Everything irreversible goes through here.
+  function commitIntent(sel, it) {
+    var q = [];
+    if (it.kind === 'grenade') {
+      throwGrenade(G, sel, it.x, it.y, DICE.live, q);
+      G.grenades--; sel.hasActed = true;
+      say('Frag thrown.');
+    } else if (it.kind === 'shot') {
+      fire(G, sel, it.w, it.shot, DICE.live, q);
+      sel.hasActed = true;
+      say(it.w.name + ' fired.');
+    } else if (it.kind === 'interact') {
+      var res = interact(G, sel, it.x, it.y, q);
+      if (!res) { msg('Nothing to do there.'); G.ui.pending = null; draw(); return; }
+      sel.hasActed = true;
+      say(res); msg(res);
+    } else if (it.kind === 'move') {
+      sel.x = it.x; sel.y = it.y; sel.hasMoved = true;
+      note(q, { kind: 'walk', id: sel.id, path: it.path });
+      if (at(G, it.x, it.y).t === 'water' && at(G, it.x, it.y).live) hurt(G, sel, SHOCK_DMG, q, 'SHOCK');
+    }
+    G.ui.pending = null;
+    G.ui.mode = 'SELECT';
+    playFx(q);
+    afterPlayerAction();
+  }
+
+  // Two stages: the first click previews and arms, the second commits. Nothing
+  // costly happens on a single stray click.
   function onClick(e) {
     if (!G || G.phase !== 'PLAYER') return;
     if (isBusy()) snapAnimations();          // impatient clicks skip the flourish
     var t = tileFromEvent(e);
     if (!t) return;
-    var sel = selected(), q, res;
 
-    if (G.ui.mode === 'GRENADE' && sel && !sel.hasActed && G.grenades > 0) {
-      if (dist(sel.x, sel.y, t.x, t.y) > GRENADE.range) { msg('Out of throwing range.'); return; }
-      q = [];
-      throwGrenade(G, sel, t.x, t.y, DICE.live, q);
-      G.grenades--; sel.hasActed = true;
-      playFx(q); say('Frag thrown.');
-      afterPlayerAction();
+    var clicked = unitAt(G, t.x, t.y);
+    if (clicked && clicked.side === 'player') {
+      if (clicked.id === G.ui.selId) {       // clicking the selected operative cancels
+        G.ui.pending = null; G.ui.mode = 'SELECT';
+        msg('');
+        draw(); renderTip(t);
+        return;
+      }
+      selectUnit(clicked.id); renderTip(t);
       return;
     }
 
-    var clicked = unitAt(G, t.x, t.y);
-    if (clicked && clicked.side === 'player') { selectUnit(clicked.id); return; }
+    var sel = selected();
     if (!sel) { msg('Click one of your operatives to select them.'); return; }
 
-    // shoot something in a lane
-    if (!sel.hasActed && !sel.disabled) {
-      var w = WEAPONS[sel.weaponId], shots = shotsFrom(G, sel.x, sel.y, w), i;
-      for (i = 0; i < shots.length; i++) {
-        var sh = shots[i];
-        var match = (sh.kind === 'barrel' && sh.x === t.x && sh.y === t.y) ||
-          (sh.kind === 'unit' && sh.hits.some(function (h) { return h.x === t.x && h.y === t.y; }));
-        if (!match) continue;
-        q = [];
-        fire(G, sel, w, sh, DICE.live, q);
-        sel.hasActed = true;
-        playFx(q); say(w.name + ' fired.');
-        afterPlayerAction();
-        return;
-      }
-      // hack a console or work a door
-      var ints = interactables(G, sel);
-      for (i = 0; i < ints.length; i++) {
-        if (ints[i].x !== t.x || ints[i].y !== t.y) continue;
-        q = [];
-        res = interact(G, sel, t.x, t.y, q);
-        if (!res) { msg('Nothing to do there.'); return; }
-        sel.hasActed = true;
-        playFx(q); say(res); msg(res);
-        afterPlayerAction();
-        return;
-      }
+    var it = resolveIntent(sel, t);
+    if (!it) {
+      G.ui.pending = null;
+      if (sel.disabled) msg(sel.name + ' was hacked — sitting this turn out.');
+      else if (done(sel)) msg(sel.name + ' is done. Pick someone else, or end the turn.');
+      else msg('');
+      draw(); renderTip(t);
+      return;
     }
 
-    // otherwise: walk
-    if (!sel.hasMoved && !sel.disabled && !clicked && !blocksMove(G, t.x, t.y)) {
-      var rm = reach(G, sel, sel.move);
-      if (rm[t.y * 32 + t.x] && !(t.x === sel.x && t.y === sel.y)) {
-        var path = pathFrom(rm, t.x, t.y);
-        q = [];
-        sel.x = t.x; sel.y = t.y; sel.hasMoved = true;
-        note(q, { kind: 'walk', id: sel.id, path: path });
-        if (at(G, t.x, t.y).t === 'water' && at(G, t.x, t.y).live) hurt(G, sel, SHOCK_DMG, q, 'SHOCK');
-        playFx(q);
-        afterPlayerAction();
-        return;
-      }
-    }
-    if (sel.disabled) msg(sel.name + ' was hacked — sitting this turn out.');
-    else if (sel.hasActed && sel.hasMoved) msg(sel.name + ' is done. Pick someone else, or end the turn.');
+    if (G.ui.pending && G.ui.pending.key === it.key) { commitIntent(sel, it); return; }
+
+    G.ui.pending = it;                       // first click: show the numbers
+    msg('');
+    draw();
+    renderTip(t);
   }
 
   // ============================================================
@@ -1649,7 +2056,8 @@
     if (G.phase !== 'PLAYER') return;
     if (isBusy()) snapAnimations();
     G.phase = 'RESOLVING';
-    G.ui.mode = 'SELECT'; G.ui.path = null; G.ui.selId = null;
+    G.ui.mode = 'SELECT'; G.ui.path = null; G.ui.selId = null; G.ui.pending = null;
+    if (elTip) elTip.hidden = true;
     alive(G, 'player').forEach(function (u) { u.disabled = 0; });
     msg('Hostiles acting…'); syncHud();
 
@@ -1680,19 +2088,49 @@
   }
   function hidePanel() { elOverlay.hidden = true; }
 
+  var RULES =
+    '<div class="how">' +
+    '<p><b>Click an operative</b> to select them. Each gets <b>one move and one action</b> per turn — the two markers under the token, and on their card at the bottom, show what they have left.</p>' +
+    '<p><b>Clicking is two-stage.</b> The first click shows the numbers: to-hit, damage, and exactly where a shove would put them. The second click on the same tile commits. Right-click, or click the operative again, to cancel.</p>' +
+    '<p><b>Every hostile shows its plan</b> — the dashed line is where it walks, the reticle is who it hits, and the number is its odds against you.</p>' +
+    '<p><span>Guns roll to hit. The room never does.</span> Shoving something into the void kills it outright. Barrels, frags and the shock prod are certainties too — that is how you beat a bad streak.</p>' +
+    '<p>Clear the sector, take an upgrade, drop into a harder one. Every sector is generated and checked to be winnable.</p>' +
+    '</div>';
+
   function titleScreen() {
     showPanel(
       '<h1>Null Sector</h1>' +
       '<p class="lede">A turn-based tactics puzzle. Mouse only.</p>' +
-      '<div class="how">' +
-      '<p><b>Click an operative</b>, then click a tile to move or a hostile to shoot. One move and one action each, per turn.</p>' +
-      '<p><b>Every hostile shows its plan</b> — the dashed line is where it walks, the reticle is who it hits, and the number is its odds.</p>' +
-      '<p><span>Guns roll to hit. The room never does.</span> Shoving something into the void kills it outright. Barrels, frags and the shock prod are certainties too — that is how you beat a bad streak.</p>' +
-      '<p>Clear the sector, take an upgrade, drop into a harder one. Every sector is generated and checked to be winnable.</p>' +
-      '</div>' +
+      RULES +
       '<button class="btn-neon" data-go>Deploy</button>'
     );
     elPanel.querySelector('[data-go]').addEventListener('click', function () { hidePanel(); startRun(); });
+  }
+
+  // The "?" in the top bar — same rules, mid-run.
+  function helpScreen() {
+    if (!elOverlay.hidden || G.phase === 'TITLE') return;
+    var back = G.phase;
+    showPanel('<h2>How to play</h2>' + RULES + '<button class="btn-neon" data-back>Back to it</button>');
+    G.phase = 'HELP';
+    elPanel.querySelector('[data-back]').addEventListener('click', function () {
+      hidePanel(); G.phase = back; draw();
+    });
+  }
+
+  // Upgrades are recorded on the operatives they affect, so you can always see
+  // where a squad's numbers came from (shown on the cards and in the inspector).
+  function givePerk(m, label) {
+    if (!m.perks) m.perks = [];
+    if (m.perks.indexOf(label) < 0) m.perks.push(label);
+  }
+  function tallyPerk(m, label) {
+    if (!m.perks) m.perks = [];
+    for (var i = 0; i < m.perks.length; i++) {
+      var mt = /^(.*?)(?: ×(\d+))?$/.exec(m.perks[i]);
+      if (mt && mt[1] === label) { m.perks[i] = label + ' ×' + ((+mt[2] || 1) + 1); return; }
+    }
+    m.perks.push(label);
   }
 
   var REWARDS = [
@@ -1706,19 +2144,27 @@
       ok: function () { return G.squad.some(function (m) { return UPGRADE[m.weaponId]; }); },
       run: function () {
         for (var i = 0; i < G.squad.length; i++) {
-          if (UPGRADE[G.squad[i].weaponId]) { G.squad[i].weaponId = UPGRADE[G.squad[i].weaponId]; return; }
+          if (UPGRADE[G.squad[i].weaponId]) {
+            G.squad[i].weaponId = UPGRADE[G.squad[i].weaponId];
+            givePerk(G.squad[i], WEAPONS[G.squad[i].weaponId].name);
+            return;
+          }
         }
       }
     },
     {
       id: 'prod', icon: '⚡', name: 'Shock prod', desc: 'Melee, never misses, stuns — and electrifies coolant',
       ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'shock'; }) && G.squad.length > 1; },
-      run: function () { G.squad[G.squad.length - 1].weaponId = 'shock'; }
+      run: function () {
+        var m = G.squad[G.squad.length - 1];
+        m.weaponId = 'shock';
+        givePerk(m, 'Shock prod');
+      }
     },
     {
       id: 'plating', icon: '▣', name: 'Plating', desc: '+2 max HP for everyone',
       ok: function () { return true; },
-      run: function () { G.squad.forEach(function (m) { m.maxHp += 2; }); }
+      run: function () { G.squad.forEach(function (m) { m.maxHp += 2; tallyPerk(m, 'Plating'); }); }
     },
     {
       id: 'frags', icon: '◉', name: 'Ordnance', desc: '+2 frag grenades',
@@ -1728,7 +2174,7 @@
     {
       id: 'legs', icon: '»', name: 'Servo legs', desc: '+1 movement for everyone',
       ok: function () { return G.squad.every(function (m) { return m.move < 5; }); },
-      run: function () { G.squad.forEach(function (m) { m.move += 1; }); }
+      run: function () { G.squad.forEach(function (m) { m.move += 1; tallyPerk(m, 'Servo legs'); }); }
     }
   ];
 
@@ -1756,8 +2202,20 @@
     var lostLine = down.length
       ? '<p style="color:#ff2d95">' + down.map(function (m) { return m.name; }).join(', ') + ' did not make it.</p>'
       : '';
+    // Current squad, so the upgrades you've taken are visible when you pick more.
+    var roster = '<dl class="roster">' + G.squad.map(function (m) {
+      var w = WEAPONS[m.weaponId];
+      return '<div class="roster__row"><dt>' + m.name + '</dt><dd>' +
+        w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + ' dmg' +
+        ' · ' + m.maxHp + ' HP' + (m.maxHp > BASE_HP ? ' (+' + (m.maxHp - BASE_HP) + ')' : '') +
+        ' · move ' + m.move + (m.move > BASE_MOVE ? ' (+' + (m.move - BASE_MOVE) + ')' : '') +
+        (m.perks && m.perks.length ? '<span class="roster__perks">' + m.perks.join(' · ') + '</span>' : '') +
+        '</dd></div>';
+    }).join('') +
+      '<div class="roster__row"><dt>Frags</dt><dd>' + G.grenades + ' in the pack</dd></div></dl>';
+
     var html = '<h2>Sector ' + String(G.level).padStart(2, '0') + ' clear</h2>' +
-      lostLine +
+      lostLine + roster +
       '<p>Squad patched up. Take one thing before the next drop.</p><div class="rewards">';
     offer.forEach(function (r, k) {
       html += '<button class="reward" type="button" data-r="' + k + '">' +
@@ -1810,7 +2268,7 @@
   var NAMES = ['VEX', 'NOMI', 'KADE', 'RIL', 'JUNO', 'ASH', 'ODEN', 'PIX'];
   var nameN = 0;
   function newOp(weaponId) {
-    return { id: uid('op'), name: NAMES[nameN++ % NAMES.length], maxHp: 5, move: 3, weaponId: weaponId };
+    return { id: uid('op'), name: NAMES[nameN++ % NAMES.length], maxHp: BASE_HP, move: BASE_MOVE, weaponId: weaponId, perks: [] };
   }
 
   function startRun() {
@@ -1877,22 +2335,30 @@
     elOverlay = document.querySelector('[data-overlay]');
     elPanel = document.querySelector('[data-panel]');
     elLive = document.querySelector('[data-live]');
+    elTip = document.querySelector('[data-tip]');
+    elHelp = document.querySelector('[data-help]');
 
     G = {
       tiles: blankTiles(), units: [], squad: [], grenades: 0,
       level: 1, turn: 1, phase: 'TITLE', tile: 48,
       fx: [], rings: [], beams: [],
-      ui: { mode: 'SELECT', selId: null, hover: null, path: null }
+      ui: { mode: 'SELECT', selId: null, hover: null, path: null, pending: null }
     };
 
     cv.addEventListener('mousemove', onMove);
-    cv.addEventListener('mouseleave', function () { G.ui.hover = null; G.ui.path = null; msg(''); draw(); });
+    cv.addEventListener('mouseleave', function () {
+      G.ui.hover = null; G.ui.path = null;
+      if (elTip) elTip.hidden = true;
+      draw();
+    });
     cv.addEventListener('click', onClick);
-    cv.addEventListener('contextmenu', function (e) {
+    cv.addEventListener('contextmenu', function (e) {   // right-click cancels
       e.preventDefault();
-      if (G.ui.mode === 'GRENADE') { G.ui.mode = 'SELECT'; draw(); }
+      G.ui.mode = 'SELECT'; G.ui.pending = null;
+      draw(); renderTip(G.ui.hover);
     });
     elEnd.addEventListener('click', endTurn);
+    if (elHelp) elHelp.addEventListener('click', helpScreen);
 
     var rt;
     window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layout, 120); });
