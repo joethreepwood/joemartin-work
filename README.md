@@ -45,6 +45,17 @@ squeeze through a corner gap: if both tiles flanking the step block sight, the
 shot stops. Don't mix the two distance functions up; `cheb` is for range,
 falloff, cover and "adjacent", `dist` is for walking.
 
+There are eighteen requisitions, and each one is contested: every entry in
+`REWARDS` carries a `run` (what it does for your squad), a `foe` (what it does for
+theirs), a `took` line for the debrief, and a `weight` for how badly they want it.
+Squad-wide numbers (damage, accuracy, range, soak, revive, extra barrels/voids)
+live on `G.mods`; weapon-shaped ones fold into a weapon **object** once via
+`gunFor()` and are stored on the unit as `wpn`. Everything downstream reads
+`gun(u)`, so a perk can't be applied in one place and forgotten in another —
+if you add a stat, add it there rather than at each call site. Requisitions that
+change a stat are capped in `ok()`; unbounded hull would overflow the pip readout
+and flatten the curve.
+
 Difficulty comes from two places. The budget in `buildLevel` scales with the
 sector number, and — every second sector — **the hostiles draft a requisition
 before you do**. Each entry in `REWARDS` therefore has both a `run` (what it does
@@ -73,6 +84,13 @@ On the interface side, four conventions worth preserving:
   Black for labels, IBM Plex Mono for figures. The neon glow is reserved for the
   board itself, which is the only place it means anything. If you add UI, add it
   in that language rather than reaching for another gradient.
+- **Nothing flashes on touch.** Three separate causes, all fixed and easy to
+  reintroduce: the default tap highlight (killed with
+  `-webkit-tap-highlight-color`), `:hover` rules that stick after a tap and make
+  buttons jump (all gated behind `@media (hover:hover) and (pointer:fine)`), and
+  rewriting the readout's `innerHTML` on every pointer move (`setTip` memoises on
+  the markup string — 50 hovers of one tile now cause zero DOM writes). Don't add
+  an ungated `:hover`, and don't write to the readout outside `setTip`.
 - **Phones get compact content, portrait gets a docked sheet.** Two independent
   media queries, mirrored in JS by `isCompact()` and `isDocked()`. Compact
   (≤820px, any orientation) swaps the full dossier for `renderSheet()` — who,

@@ -78,9 +78,18 @@
     railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 2, dmgMax: 3, acc: 88,  falloff: 4,  kb: 0, pierce: true,
                blurb: 'Crosses the board. Pierces the lane — yours included.' },
     shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 2, acc: 100, falloff: 0,  kb: 1, stun: true, electrify: true,
-               blurb: 'Adjacent only, never misses. Stuns and charges coolant.' }
+               blurb: 'Adjacent only, never misses. Stuns and charges coolant.' },
+    carbine: { id: 'carbine', name: 'Carbine',    range: 3, dmgMin: 3, dmgMax: 4, acc: 94,  falloff: 6,  kb: 1,
+               blurb: 'Steadier than the sidearm, and it hits harder.' },
+    hammer:  { id: 'hammer',  name: 'Breach Hammer', range: 1, dmgMin: 4, dmgMax: 6, acc: 100, falloff: 0, kb: 3,
+               blurb: 'Adjacent, never misses, and shoves three tiles. A void on the far side is a kill.' },
+    lance:   { id: 'lance',   name: 'Arc Lance',  range: 3, dmgMin: 2, dmgMax: 3, acc: 96,  falloff: 0,  kb: 0, pierce: true,
+               blurb: 'Skewers everything in the lane. Mind who is standing behind it.' }
   };
-  var UPGRADE = { pistol: 'shotgun', shotgun: 'railgun' };  // railgun is the top of the chain
+  // Tier-up chain. The specials (hammer, lance, prod) arrive as their own
+  // requisitions and are terminal — the chain is ordered so a trade-up never
+  // feels like a downgrade.
+  var UPGRADE = { pistol: 'carbine', carbine: 'shotgun', shotgun: 'railgun' };
   var GRENADE = { name: 'Frag', range: 3, dmgMin: 2, dmgMax: 3, kb: 1 };
 
   var ENEMIES = {
@@ -180,7 +189,24 @@
     return null;
   }
   function passable(s, x, y) { return inB(x, y) && !blocksMove(s, x, y) && !unitAt(s, x, y); }
-  function weaponOf(u) { return u.side === 'player' ? WEAPONS[u.weaponId] : u.atk; }
+  // Squad perks (damage, accuracy, range) are folded into a weapon *object* once,
+  // at unit creation, and stored on the unit as `wpn`. Everything downstream —
+  // previews, the solver, the HUD — reads `gun(u)`, so a perk cannot be applied
+  // in one place and forgotten in another.
+  function gunFor(member, mods) {
+    var base = WEAPONS[member.weaponId], m = mods || {};
+    if (!m.dmg && !m.acc && !m.range) return base;      // unmodified: share it
+    return {
+      id: base.id, name: base.name,
+      range: Math.max(1, base.range + (m.range || 0)),
+      dmgMin: base.dmgMin + (m.dmg || 0), dmgMax: base.dmgMax + (m.dmg || 0),
+      acc: Math.min(100, base.acc + (m.acc || 0)), falloff: base.falloff,
+      kb: base.kb, pierce: base.pierce, stun: base.stun, electrify: base.electrify,
+      blurb: base.blurb
+    };
+  }
+  function gun(u) { return u.wpn || WEAPONS[u.weaponId]; }
+  function weaponOf(u) { return u.side === 'player' ? gun(u) : u.atk; }
 
   // A lean clone for the solver: terrain + units + counters, no render/UI cruft.
   function cloneSim(s) {
@@ -191,13 +217,15 @@
       units: s.units.map(function (u) {
         return {
           id: u.id, side: u.side, typeId: u.typeId, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp,
-          move: u.move, weaponId: u.weaponId, atk: u.atk, kbResist: u.kbResist,
+          move: u.move, weaponId: u.weaponId, wpn: u.wpn, atk: u.atk,
+          kbResist: u.kbResist, soak: u.soak,
           stunned: u.stunned, disabled: u.disabled, armed: u.armed,
           hasMoved: false, hasActed: false, intent: null
         };
       }),
       grenades: s.grenades,
       shrapnel: !!s.shrapnel,
+      revive: s.revive || 0,
       sim: true
     };
   }
@@ -322,8 +350,15 @@
 
   function hurt(s, u, n, fxq, label) {
     if (!u || u.hp <= 0 || n <= 0) return;
+    if (u.soak) n = Math.max(1, n - u.soak);     // plating never blocks a hit outright
     u.hp -= n;
     note(fxq, { kind: 'dmg', x: u.x, y: u.y, n: n, label: label, side: u.side });
+    if (u.hp <= 0 && u.side === 'player' && s.revive > 0) {
+      // Field surgeon: the first operative to fall this sector gets back up.
+      s.revive--; u.hp = 1;
+      note(fxq, { kind: 'revive', x: u.x, y: u.y });
+      return;
+    }
     if (u.hp <= 0) {
       u.hp = 0;
       note(fxq, { kind: 'die', x: u.x, y: u.y, side: u.side });
@@ -645,7 +680,8 @@
     return true;
   }
 
-  function buildLevel(level, squad, grenades, seed, foe) {
+  function buildLevel(level, squad, grenades, seed, foe, mods) {
+    mods = mods || {};
     var rng = mulberry32(seed >>> 0);
     var s = { tiles: blankTiles(), units: [], grenades: grenades, seed: seed, level: level };
     var i, x, y, tries;
@@ -672,6 +708,8 @@
         id: squad[i].id, side: 'player', typeId: 'op', name: squad[i].name,
         x: sl.x, y: sl.y, hp: squad[i].maxHp, maxHp: squad[i].maxHp,
         move: squad[i].move, weaponId: squad[i].weaponId,
+        wpn: gunFor(squad[i], mods), soak: mods.soak || 0,
+        kbResist: mods.noShove ? 99 : 0,
         hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null
       });
     }
@@ -679,9 +717,16 @@
     // --- enemies, drawn against a power budget so difficulty tracks your squad ---
     // Anything the hostiles drafted is applied here, and priced in: individually
     // tougher hostiles mean slightly fewer of them, so the curve stays a curve.
-    var fp = foe || { count: 0, dmg: 0, hp: 0, move: 0, jolt: false, shrapnel: false };
-    var drafted = fp.count + fp.dmg + fp.hp + fp.move + (fp.jolt ? 1 : 0) + (fp.shrapnel ? 1 : 0);
+    var fp = foe || {};
+    fp = {
+      count: fp.count || 0, dmg: fp.dmg || 0, hp: fp.hp || 0, move: fp.move || 0,
+      acc: fp.acc || 0, sight: fp.sight || 0, kb: fp.kb || 0, soak: fp.soak || 0,
+      brace: fp.brace || 0, jolt: !!fp.jolt, shrapnel: !!fp.shrapnel
+    };
+    var drafted = fp.count + fp.dmg + fp.hp + fp.move + fp.soak + fp.brace + fp.kb +
+      (fp.acc ? 1 : 0) + (fp.sight ? 1 : 0) + (fp.jolt ? 1 : 0) + (fp.shrapnel ? 1 : 0);
     s.shrapnel = !!fp.shrapnel;
+    s.revive = mods.revive || 0;
 
     var pool = Object.keys(ENEMIES).filter(function (k) { return ENEMIES[k].unlock <= level; });
     var budget = 1.5 + level * 2.2 + squad.length * 0.5 - drafted * 0.6;
@@ -695,14 +740,16 @@
       var tooClose = alive(s, 'player').some(function (o) { return cheb(o.x, o.y, x, y) <= 2; });
       if (tooClose) continue;
       var atk = {
-        range: def.atk.range, dmgMin: def.atk.dmgMin + fp.dmg, dmgMax: def.atk.dmgMax + fp.dmg,
-        acc: def.atk.acc, falloff: def.atk.falloff,
-        disable: def.atk.disable || fp.jolt, blast: def.atk.blast
+        range: def.atk.range ? def.atk.range + fp.sight : 0,
+        dmgMin: def.atk.dmgMin + fp.dmg, dmgMax: def.atk.dmgMax + fp.dmg,
+        acc: Math.min(100, def.atk.acc + fp.acc), falloff: def.atk.falloff,
+        kb: fp.kb, disable: def.atk.disable || fp.jolt, blast: def.atk.blast
       };
       s.units.push({
         id: uid('e'), side: 'enemy', typeId: def.id, x: x, y: y,
         hp: def.hp + fp.hp, maxHp: def.hp + fp.hp,
-        move: def.move + fp.move, atk: atk, kbResist: def.kbResist || 0,
+        move: def.move + fp.move, atk: atk, soak: fp.soak,
+        kbResist: (def.kbResist || 0) + fp.brace,
         hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null
       });
       budget -= def.cost + fp.hp * 0.5 + fp.dmg * 0.5; placed++;
@@ -711,7 +758,8 @@
 
     // --- hazards + interactables ---
     var enemies = alive(s, 'enemy');
-    var nPits = 1 + Math.floor(rng() * 2), nBarrels = 1 + Math.floor(rng() * 2);
+    var nPits = 1 + Math.floor(rng() * 2) + (mods.pits || 0);
+    var nBarrels = 1 + Math.floor(rng() * 2) + (mods.barrels || 0);
     function freeSpot(minY, maxY) {
       for (var a = 0; a < 60; a++) {
         var fx2 = Math.floor(rng() * W), fy2 = minY + Math.floor(rng() * (maxY - minY + 1));
@@ -835,7 +883,7 @@
   function bestPlay(s, u) {
     if (u.disabled) return { score: 0, mx: u.x, my: u.y, act: null };
     var rm = reach(s, u, u.move), keys = Object.keys(rm);
-    var w = WEAPONS[u.weaponId], threat = threatCells(s);
+    var w = gun(u), threat = threatCells(s);
     var best = { score: -1e9 };
 
     // Only ever consider frag targets on or beside a hostile, and work out
@@ -907,7 +955,7 @@
       if (at(s, u.x, u.y).t === 'water' && at(s, u.x, u.y).live) hurt(s, u, SHOCK_DMG, fxq, 'SHOCK');
     }
     if (!play.act || u.hp <= 0) return;
-    if (play.act.kind === 'shot') fire(s, u, WEAPONS[u.weaponId], play.act.shot, dice, fxq);
+    if (play.act.kind === 'shot') fire(s, u, gun(u), play.act.shot, dice, fxq);
     else if (play.act.kind === 'grenade') { throwGrenade(s, u, play.act.x, play.act.y, dice, fxq); s.grenades--; }
     else if (play.act.kind === 'interact') interact(s, u, play.act.x, play.act.y, fxq);
     u.hasActed = true;
@@ -935,18 +983,24 @@
   // ============================================================
   // 8. PIPELINE — only ever hand back a level the solver has beaten.
   // ============================================================
-  function safeLevel(level, squad, grenades, foe) {
+  function safeLevel(level, squad, grenades, foe, mods) {
+    mods = mods || {};
     // The floor: open room, a couple of drones, each with a pit at its back.
     // Hostile drafts apply here too, or clearing a fallback sector would feel
     // like the difficulty fell off a cliff.
-    var fp = foe || { count: 0, dmg: 0, hp: 0, move: 0, jolt: false, shrapnel: false };
-    var s = { tiles: blankTiles(), units: [], grenades: grenades, seed: 0, level: level, shrapnel: !!fp.shrapnel };
+    var fp = foe || {};
+    fp = { dmg: fp.dmg || 0, hp: fp.hp || 0, move: fp.move || 0, kb: fp.kb || 0,
+           soak: fp.soak || 0, brace: fp.brace || 0, jolt: !!fp.jolt, shrapnel: !!fp.shrapnel };
+    var s = { tiles: blankTiles(), units: [], grenades: grenades, seed: 0, level: level,
+              shrapnel: !!fp.shrapnel, revive: mods.revive || 0 };
     var n = Math.min(3, 1 + Math.ceil(level / 4)), i;
     for (i = 0; i < squad.length; i++) {
       s.units.push({
         id: squad[i].id, side: 'player', typeId: 'op', name: squad[i].name,
         x: 2 + i * 2, y: H - 1, hp: squad[i].maxHp, maxHp: squad[i].maxHp,
         move: squad[i].move, weaponId: squad[i].weaponId,
+        wpn: gunFor(squad[i], mods), soak: mods.soak || 0,
+        kbResist: mods.noShove ? 99 : 0,
         hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null
       });
     }
@@ -958,9 +1012,9 @@
         move: ENEMIES.grunt.move + fp.move,
         atk: {
           range: 1, dmgMin: ENEMIES.grunt.atk.dmgMin + fp.dmg, dmgMax: ENEMIES.grunt.atk.dmgMax + fp.dmg,
-          acc: 100, disable: fp.jolt
+          acc: 100, kb: fp.kb, disable: fp.jolt
         },
-        kbResist: 0,
+        soak: fp.soak, kbResist: fp.brace,
         hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null
       });
       if (ey - 1 >= 0) s.tiles[ey - 1][ex] = tile('pit');
@@ -969,11 +1023,11 @@
     return s;
   }
 
-  function generateLevel(level, squad, grenades, foe) {
+  function generateLevel(level, squad, grenades, foe, mods) {
     var t0 = Date.now();
     for (var a = 0; a < GEN_TRIES; a++) {
       var seed = (Math.floor(liveRng() * 0xffffffff) ^ (level * 2654435761)) >>> 0;
-      var s = buildLevel(level, squad, grenades, seed, foe);
+      var s = buildLevel(level, squad, grenades, seed, foe, mods);
       if (!s) continue;
       if (!alive(s, 'player').length || !alive(s, 'enemy').length) continue;
       if (canSolve(s)) {
@@ -982,7 +1036,7 @@
       }
     }
     // Should not happen in practice — worth knowing if it ever does in the wild.
-    var f = safeLevel(level, squad, grenades, foe);
+    var f = safeLevel(level, squad, grenades, foe, mods);
     f.gen = { attempts: GEN_TRIES, fallback: true, ms: Date.now() - t0 };
     return f;
   }
@@ -1234,7 +1288,7 @@
     }
     // firing lanes + targets
     if (!u.hasActed && !u.disabled) {
-      var w = WEAPONS[u.weaponId];
+      var w = gun(u);
       for (var d = 0; d < AIM.length; d++) {
         for (var i2 = 1; i2 <= w.range; i2++) {
           var lx = u.x + AIM[d][0] * i2, ly = u.y + AIM[d][1] * i2;
@@ -1281,7 +1335,7 @@
   // in the same strip can never hide it.
   function drawOdds(u) {
     if (!u || G.phase !== 'PLAYER' || u.hasActed || u.disabled || G.ui.mode === 'GRENADE') return;
-    var w = WEAPONS[u.weaponId], shots = shotsFrom(G, u.x, u.y, w);
+    var w = gun(u), shots = shotsFrom(G, u.x, u.y, w);
     for (var k = 0; k < shots.length; k++) {
       if (shots[k].kind !== 'unit') continue;
       for (var q = 0; q < shots[k].hits.length; q++) {
@@ -1736,6 +1790,10 @@
           G.fx.push({ x: f.x, y: f.y, text: 'HACKED', color: C.enemy, t: 0, dur: 900, delay: delay }); break;
         case 'arm':
           G.fx.push({ x: f.x, y: f.y, text: 'ARMED', color: C.barrel, t: 0, dur: 900, delay: delay }); break;
+        case 'revive':
+          G.fx.push({ x: f.x, y: f.y, text: 'BACK UP', color: C.mint, big: true, t: 0, dur: 1100, delay: delay });
+          G.rings.push({ x: f.x, y: f.y, color: C.mint, t: 0, dur: 560, delay: delay });
+          delay += 120; break;
       }
     }
     Object.keys(paths).forEach(function (id) {
@@ -1766,8 +1824,9 @@
       out.pct = Math.min(out.pct, pct);
       out.targets.push({ unit: t, pct: pct });
 
-      // Knockback is deterministic — say exactly where it ends up.
-      if (w.kb && !out.kbKill) {
+      // Knockback is deterministic — say exactly where it ends up. A braced
+      // target can absorb the whole shove, in which case there is nothing to say.
+      if (w.kb && !out.kbKill && w.kb - (t.kbResist || 0) > 0) {
         var n = w.kb - (t.kbResist || 0), cx2 = t.x, cy2 = t.y, res = null;
         for (var k = 0; k < n; k++) {
           var nx = cx2 + dx, ny = cy2 + dy;
@@ -1834,7 +1893,7 @@
 
     elSquad.innerHTML = '';
     G.squad.forEach(function (m) {
-      var u = byId(G, m.id), w = WEAPONS[m.weaponId];
+      var u = byId(G, m.id), w = gunFor(m, G.mods);
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip' + (G.ui.selId === m.id ? ' chip--sel' : '') + (u && u.hp > 0 ? (done(u) ? ' chip--done' : '') : ' chip--down');
@@ -1906,7 +1965,7 @@
       return { kind: 'grenade', key: 'g:' + t.x + ',' + t.y, x: t.x, y: t.y };
     }
     if (!sel.hasActed) {
-      var w = WEAPONS[sel.weaponId], shots = shotsFrom(G, sel.x, sel.y, w);
+      var w = gun(sel), shots = shotsFrom(G, sel.x, sel.y, w);
       for (i = 0; i < shots.length; i++) {
         var sh = shots[i];
         var hit = (sh.kind === 'barrel' && sh.x === t.x && sh.y === t.y) ||
@@ -1974,7 +2033,7 @@
           (u.intent.pct >= 100 ? ' — certain.' : ' at ' + u.intent.pct + '%.'));
       }
     } else if (u && u.side === 'player') {
-      var wp = WEAPONS[u.weaponId];
+      var wp = gun(u);
       d.tag = 'Operative'; d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
       d.bigs = [
         { v: u.hp + '/' + u.maxHp, label: 'hull', cls: '' },
@@ -2025,6 +2084,9 @@
                     { v: it.w.dmgMin + '–' + it.w.dmgMax, label: 'damage', cls: 'big--dmg' }];
           a.rows.push(['Weapon', it.w.name]);
           a.rows.push(['Range', cheb(sel.x, sel.y, it.x, it.y) + ' of ' + it.w.range]);
+          if (!pv.kbKill && it.w.kb && (pv.targets[0] && pv.targets[0].unit.kbResist)) {
+            a.rows.push(['Shove', 'braced \u2014 none']);
+          }
           if (pv.kbKill) {
             var r = pv.kbKill.result;
             a.rows.push(['Shove', r === 'void' ? 'into the void'
@@ -2086,12 +2148,23 @@
   function isCompact() { return !!(compactMQ && compactMQ.matches); }
   function isDocked() { return !!(dockMQ && dockMQ.matches); }
 
+  // Writing innerHTML on every pointer move repaints the docked sheet on every
+  // frame, which on a phone looks like the screen flashing. Only touch the DOM
+  // when the markup actually differs.
+  var tipSig = null;
+  function setTip(html) {
+    if (html === tipSig) { elTip.hidden = false; return false; }
+    tipSig = html;
+    elTip.innerHTML = html;
+    elTip.hidden = false;
+    return true;
+  }
   function tipEmpty(reason) {
     if (isDocked()) {
-      elTip.innerHTML = '<p class="tip__sheet-hint">' + (reason || 'Tap an operative') + '</p>';
-      elTip.hidden = false;
+      setTip('<p class="tip__sheet-hint">' + (reason || 'Tap an operative') + '</p>');
     } else {
       elTip.hidden = true;
+      tipSig = null;
     }
   }
 
@@ -2119,8 +2192,7 @@
     if (d.confirm) {
       h += '<div class="tip__confirm tip__confirm--' + d.confirm.state + '">' + d.confirm.text + '</div>';
     }
-    elTip.innerHTML = h;
-    elTip.hidden = false;
+    setTip(h);
   }
 
   function renderTip(t) {
@@ -2168,9 +2240,8 @@
       h += '<div class="tip__confirm tip__confirm--' + d.confirm.state + '">' + d.confirm.text + '</div>';
     }
 
-    elTip.innerHTML = h;
-    elTip.hidden = false;
-    placeTip(t);
+    var changed = setTip(h);
+    if (changed || !elTip.style.left) placeTip(t); else placeTip(t);
   }
 
   // Prefer the empty space beside the board so the panel never covers tiles.
@@ -2396,56 +2467,155 @@
   // Every requisition cuts both ways. `run` is what it does for you; `foe` is
   // what it does for them when they draft it first, and `took` is how that
   // reads on the debrief. Same crate, whoever gets there first.
+  // Eighteen crates. `run` is what it does for your squad, `foe` is what it does
+  // for theirs when they draft it first, `took` is how that reads on the debrief,
+  // and `weight` is how badly they want it (they always take the best one).
+  // Squad-wide numbers live on G.mods and fold into weapons via gunFor().
+  function bumpMod(k, n, label) {
+    G.mods[k] = (G.mods[k] || 0) + n;
+    G.squad.forEach(function (m) { tallyPerk(m, label); });
+  }
+  function firstWith(fn) {
+    for (var i = 0; i < G.squad.length; i++) if (fn(G.squad[i])) return G.squad[i];
+    return null;
+  }
+  var WEAPON_NAMES = Object.keys(WEAPONS).map(function (k) { return WEAPONS[k].name; });
+  function setWeapon(m, id) {
+    m.weaponId = id;
+    // the card shows what they carry now, not everything they have ever carried
+    if (m.perks) m.perks = m.perks.filter(function (t) { return WEAPON_NAMES.indexOf(t) < 0; });
+    givePerk(m, WEAPONS[id].name);
+  }
+  function giveWeapon(id) {
+    // hand it to whoever is carrying the least interesting thing
+    var m = firstWith(function (x) { return x.weaponId === 'pistol'; }) ||
+            firstWith(function (x) { return x.weaponId === 'carbine'; }) ||
+            G.squad[G.squad.length - 1];
+    setWeapon(m, id);
+  }
+
   var REWARDS = [
+    // --- squad ---------------------------------------------------------
     {
-      id: 'recruit', icon: '+', name: 'Reinforcement', desc: 'One more operative', weight: 5,
+      id: 'recruit', icon: '+', name: 'Reinforcement', desc: 'One more operative', weight: 9,
       ok: function () { return G.squad.length < MAX_OPS; },
       run: function () { G.squad.push(newOp('pistol')); },
       foe: function () { G.foe.count += 1; }, took: 'one more hostile per sector'
     },
     {
-      id: 'upgrade', icon: '↑', name: 'Weapon upgrade', desc: 'Sidearm → Scattergun → Railgun', weight: 6,
+      id: 'upgrade', icon: '\u2191', name: 'Weapon upgrade', desc: 'Trade one up a tier', weight: 7,
       ok: function () { return G.squad.some(function (m) { return UPGRADE[m.weaponId]; }); },
       run: function () {
-        for (var i = 0; i < G.squad.length; i++) {
-          if (UPGRADE[G.squad[i].weaponId]) {
-            G.squad[i].weaponId = UPGRADE[G.squad[i].weaponId];
-            givePerk(G.squad[i], WEAPONS[G.squad[i].weaponId].name);
-            return;
-          }
-        }
+        var m = firstWith(function (x) { return UPGRADE[x.weaponId]; });
+        if (m) setWeapon(m, UPGRADE[m.weaponId]);
       },
       foe: function () { G.foe.dmg += 1; }, took: '+1 damage'
     },
+    // --- weapons -------------------------------------------------------
     {
-      id: 'prod', icon: '⚡', name: 'Shock prod', desc: 'Adjacent, never misses, stuns', weight: 4,
-      ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'shock'; }) && G.squad.length > 1; },
-      run: function () {
-        var m = G.squad[G.squad.length - 1];
-        m.weaponId = 'shock';
-        givePerk(m, 'Shock prod');
-      },
-      foe: function () { G.foe.jolt = true; }, took: 'their hits disable you'
+      id: 'carbine', icon: '\u2261', name: 'Carbine', desc: 'Range 3 \u00b7 3\u20134 damage', weight: 4,
+      ok: function () { return G.squad.some(function (m) { return m.weaponId === 'pistol'; }); },
+      run: function () { giveWeapon('carbine'); },
+      foe: function () { G.foe.acc += 8; }, took: 'they aim better'
     },
     {
-      id: 'plating', icon: '▣', name: 'Plating', desc: '+2 hull, everyone', weight: 3,
-      ok: function () { return true; },
+      id: 'hammer', icon: '\u25AC', name: 'Breach hammer', desc: 'Adjacent \u00b7 4\u20136 \u00b7 shoves 3', weight: 8,
+      ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'hammer'; }); },
+      run: function () { giveWeapon('hammer'); },
+      foe: function () { G.foe.kb += 1; }, took: 'their hits shove you'
+    },
+    {
+      id: 'lance', icon: '\u2500', name: 'Arc lance', desc: 'Range 3 \u00b7 pierces the lane', weight: 5,
+      ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'lance'; }); },
+      run: function () { giveWeapon('lance'); },
+      foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
+    },
+    {
+      id: 'prod', icon: '\u26A1', name: 'Shock prod', desc: 'Adjacent, never misses, stuns', weight: 4,
+      ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'shock'; }) && G.squad.length > 1; },
+      run: function () { giveWeapon('shock'); },
+      foe: function () { G.foe.jolt = true; }, took: 'their hits disable you'
+    },
+    // --- weapon perks --------------------------------------------------
+    {
+      id: 'ammo', icon: '\u25B2', name: 'Hollow points', desc: '+1 damage, every weapon', weight: 7,
+      ok: function () { return (G.mods.dmg || 0) < 3; },
+      run: function () { bumpMod('dmg', 1, 'Hollow points'); },
+      foe: function () { G.foe.dmg += 1; }, took: '+1 damage'
+    },
+    {
+      id: 'optics', icon: '\u25CE', name: 'Targeting optics', desc: '+8% to hit', weight: 5,
+      ok: function () { return (G.mods.acc || 0) < 16; },
+      run: function () { bumpMod('acc', 8, 'Optics'); },
+      foe: function () { G.foe.acc += 8; }, took: 'they aim better'
+    },
+    {
+      id: 'sight', icon: '\u21E2', name: 'Long optics', desc: '+1 range, every weapon', weight: 6,
+      ok: function () { return (G.mods.range || 0) < 2; },
+      run: function () { bumpMod('range', 1, 'Long optics'); },
+      foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
+    },
+    // --- defence -------------------------------------------------------
+    {
+      id: 'plating', icon: '\u25A3', name: 'Plating', desc: '+2 hull, everyone', weight: 4,
+      // capped: the hull readout is drawn as pips, and unbounded HP would both
+      // overflow the card and flatten the difficulty curve
+      ok: function () { return G.squad.every(function (m) { return m.maxHp < 11; }); },
       run: function () { G.squad.forEach(function (m) { m.maxHp += 2; tallyPerk(m, 'Plating'); }); },
       foe: function () { G.foe.hp += 1; }, took: '+1 hull'
     },
     {
-      id: 'frags', icon: '◉', name: 'Ordnance', desc: '+2 frag grenades', weight: 2,
+      id: 'plates', icon: '\u2593', name: 'Ablative plates', desc: 'Every hit lands 1 softer', weight: 6,
+      ok: function () { return (G.mods.soak || 0) < 2; },
+      run: function () { bumpMod('soak', 1, 'Ablative plates'); },
+      foe: function () { G.foe.soak += 1; }, took: 'your hits land softer'
+    },
+    {
+      id: 'boots', icon: '\u2913', name: 'Mag boots', desc: 'Nothing can shove you', weight: 5,
+      ok: function () { return !G.mods.noShove; },
+      run: function () { G.mods.noShove = true; G.squad.forEach(function (m) { givePerk(m, 'Mag boots'); }); },
+      foe: function () { G.foe.brace += 1; }, took: 'they resist your shoves'
+    },
+    {
+      id: 'surgeon', icon: '\u271A', name: 'Field surgeon', desc: 'One operative gets back up', weight: 7,
+      ok: function () { return (G.mods.revive || 0) < 2; },
+      run: function () { G.mods.revive = (G.mods.revive || 0) + 1; },
+      foe: function () { G.foe.hp += 1; }, took: '+1 hull'
+    },
+    // --- mobility ------------------------------------------------------
+    {
+      id: 'legs', icon: '\u00BB', name: 'Servo legs', desc: '+1 move, everyone', weight: 5,
+      ok: function () { return G.squad.every(function (m) { return m.move < 5; }); },
+      run: function () { G.squad.forEach(function (m) { m.move += 1; tallyPerk(m, 'Servo legs'); }); },
+      foe: function () { G.foe.move += 1; }, took: '+1 move'
+    },
+    // --- ordnance and the room ----------------------------------------
+    {
+      id: 'frags', icon: '\u25C9', name: 'Ordnance', desc: '+2 frag grenades', weight: 3,
       ok: function () { return true; },
       run: function () { G.grenades += 2; },
       foe: function () { G.foe.shrapnel = true; }, took: 'they burst on death'
     },
     {
-      id: 'legs', icon: '»', name: 'Servo legs', desc: '+1 move, everyone', weight: 3,
-      ok: function () { return G.squad.every(function (m) { return m.move < 5; }); },
-      run: function () { G.squad.forEach(function (m) { m.move += 1; tallyPerk(m, 'Servo legs'); }); },
-      foe: function () { G.foe.move += 1; }, took: '+1 move'
+      id: 'cache', icon: '\u2691', name: 'Fuel cache', desc: 'One more barrel per sector', weight: 3,
+      ok: function () { return (G.mods.barrels || 0) < 2; },
+      run: function () { G.mods.barrels = (G.mods.barrels || 0) + 1; },
+      foe: function () { G.foe.shrapnel = true; }, took: 'they burst on death'
+    },
+    {
+      id: 'charges', icon: '\u25BC', name: 'Breaching charges', desc: 'One more void per sector', weight: 6,
+      ok: function () { return (G.mods.pits || 0) < 2; },
+      run: function () { G.mods.pits = (G.mods.pits || 0) + 1; },
+      foe: function () { G.foe.count += 1; }, took: 'one more hostile per sector'
+    },
+    {
+      id: 'jammer', icon: '\u2716', name: 'Signal jammer', desc: 'They skip their next draft', weight: 8,
+      ok: function () { return !G.foe.jammed; },
+      run: function () { G.foe.jammed = true; },
+      foe: function () { G.foe.jamNext = true; }, took: 'your next crate is picked over'
     }
   ];
+
   function rewardById(id) {
     for (var i = 0; i < REWARDS.length; i++) if (REWARDS[i].id === id) return REWARDS[i];
     return null;
@@ -2482,8 +2652,13 @@
     // Every second sector the hostiles reach the crate first. They take the most
     // valuable thing in it — deliberately, not at random — and it is gone.
     var stolen = null;
-    if (foeDrafts(G.level) && pool.length > 3) {
-      var offerPlus = pool.slice(0, 4);
+    var offerCount = G.foe.jamNext ? 2 : 3;   // they jammed the last crate
+    G.foe.jamNext = false;
+    if (G.foe.jammed && foeDrafts(G.level)) {
+      G.foe.jammed = false;                   // the jammer is a one-shot
+      track('hostile_draft_jammed', { sector: G.level });
+    } else if (foeDrafts(G.level) && pool.length > 3) {
+      var offerPlus = pool.slice(0, offerCount + 1);
       offerPlus.sort(function (a, b) { return b.weight - a.weight; });
       stolen = offerPlus[0];
       stolen.foe();
@@ -2491,48 +2666,39 @@
       pool = pool.filter(function (r) { return r !== stolen; });
       track('hostiles_drafted', { sector: G.level, upgrade: stolen.id, foe_upgrades: G.foe.taken.length });
     }
-    var offer = pool.slice(0, 3);
+    var offer = pool.slice(0, offerCount);
 
-    var lostLine = down.length
-      ? '<p class="tip__warn" style="display:block">' + down.map(function (m) { return m.name; }).join(', ') +
-        ' did not make it out.</p>'
+    // The screen exists to make one choice. The squad's own numbers are already
+    // on the cards at the bottom of the screen and in the inspector, so the
+    // roster table that used to live here was just noise between you and the
+    // decision. What stays: what it cost, what they took, what you can have.
+    var casualties = down.length
+      ? '<p class="brief__cost">' + down.map(function (m) { return m.name; }).join(', ') +
+        (down.length === 1 ? ' did not make it out.' : ' did not make it out.') + '</p>'
       : '';
     var stolenLine = stolen
-      ? '<div class="steal"><span class="tab tab--foe">Hostiles drafted first</span>' +
+      ? '<div class="steal"><span class="tab tab--foe">They got there first</span>' +
         '<p class="steal__what"><b>' + stolen.name + '</b> &mdash; ' + stolen.took + '</p></div>'
       : '';
-    // Current squad, so the upgrades you've taken are visible when you pick more.
-    var roster = '<dl class="roster">' + G.squad.map(function (m) {
-      var w = WEAPONS[m.weaponId];
-      return '<div class="roster__row"><dt>' + m.name + '</dt><dd>' +
-        w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax +
-        ' · ' + m.maxHp + ' hull' + (m.maxHp > BASE_HP ? ' (+' + (m.maxHp - BASE_HP) + ')' : '') +
-        ' · move ' + m.move + (m.move > BASE_MOVE ? ' (+' + (m.move - BASE_MOVE) + ')' : '') +
-        (m.perks && m.perks.length ? '<span class="roster__perks">' + m.perks.join(' · ') + '</span>' : '') +
-        '</dd></div>';
-    }).join('') +
-      '<div class="roster__row"><dt>Frags</dt><dd>' + G.grenades + '</dd></div>' +
-      (G.foe.taken.length
-        ? '<div class="roster__row roster__row--foe"><dt>Hostiles</dt><dd>' + foeLabels().join(' · ') + '</dd></div>'
-        : '') +
-      '</dl>';
-
+    var jammedLine = (!stolen && foeDrafts(G.level))
+      ? '<p class="brief__note">Jammer held. The crate is untouched.</p>' : '';
     // Flag the next draft before it happens, so it never feels arbitrary.
     var nextWarn = foeDrafts(G.level + 1)
       ? '<p class="steal__next">They draft again after the next sector.</p>' : '';
+    var picked = offerCount < 3
+      ? '<p class="brief__note">They picked the crate over. Two left.</p>' : '';
 
-    var html = '<span class="tab tab--mint">Debrief</span>' +
-      '<h2>Sector ' + String(G.level).padStart(2, '0') + ' cleared</h2>' +
-      lostLine + stolenLine + roster +
+    var html = '<h2>Sector ' + String(G.level).padStart(2, '0') + ' cleared</h2>' +
+      casualties + stolenLine + jammedLine + picked +
       '<span class="tab">Requisition &mdash; take one</span>' +
-      nextWarn + '<div class="rewards">';
+      '<div class="rewards">';
     offer.forEach(function (r, k) {
       html += '<button class="reward" type="button" data-r="' + k + '">' +
         '<span class="reward__icon">' + r.icon + '</span>' +
         '<span class="reward__name">' + r.name + '</span>' +
         '<span class="reward__desc">' + r.desc + '</span></button>';
     });
-    html += '</div>';
+    html += '</div>' + nextWarn;
     showPanel(html);
     say('Sector clear. Choose an upgrade.');
     Array.prototype.forEach.call(elPanel.querySelectorAll('[data-r]'), function (b) {
@@ -2589,7 +2755,9 @@
     G.level = 1;
     G.grenades = 1;
     G.squad = [newOp('pistol'), newOp('shotgun')];
-    G.foe = { count: 0, dmg: 0, hp: 0, move: 0, jolt: false, shrapnel: false, taken: [] };
+    G.foe = { count: 0, dmg: 0, hp: 0, move: 0, acc: 0, sight: 0, kb: 0, soak: 0, brace: 0,
+              jolt: false, shrapnel: false, jammed: false, jamNext: false, taken: [] };
+    G.mods = { dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false };
     G.runStart = Date.now();
     track('game_started', {});
     startLevel();
@@ -2597,7 +2765,7 @@
 
   function startLevel() {
     G.epoch = (G.epoch || 0) + 1;      // invalidates any in-flight waitIdle callbacks
-    var built = generateLevel(G.level, G.squad, G.grenades, G.foe);
+    var built = generateLevel(G.level, G.squad, G.grenades, G.foe, G.mods);
     G.tiles = built.tiles;
     G.units = built.units;
     G.grenades = built.grenades;
@@ -2659,7 +2827,9 @@
     G = {
       tiles: blankTiles(), units: [], squad: [], grenades: 0,
       level: 1, turn: 1, phase: 'TITLE', tile: 48,
-      foe: { count: 0, dmg: 0, hp: 0, move: 0, jolt: false, shrapnel: false, taken: [] },
+      foe: { count: 0, dmg: 0, hp: 0, move: 0, acc: 0, sight: 0, kb: 0, soak: 0, brace: 0,
+             jolt: false, shrapnel: false, jammed: false, jamNext: false, taken: [] },
+      mods: { dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false },
       fx: [], rings: [], beams: [],
       ui: { mode: 'SELECT', selId: null, hover: null, path: null, pending: null }
     };

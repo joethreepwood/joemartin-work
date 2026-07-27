@@ -32,6 +32,9 @@
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
   color:#eef1ff;font-family:var(--mono);font-size:16px;
   -webkit-text-size-adjust:100%;overscroll-behavior:none;}
+/* No grey tap flash, and no text selection flicker when tapping fast */
+*{-webkit-tap-highlight-color:transparent;}
+button,canvas,a{-webkit-user-select:none;user-select:none;}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;
   overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 
@@ -76,7 +79,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
   white-space:nowrap;}
 .hud__back{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;
   font-size:1rem;color:var(--dim);text-decoration:none;border:2px solid var(--edge);}
-.hud__back:hover{color:var(--ink);background:var(--dim);}
 
 /* top-right readouts */
 .stat{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -90,7 +92,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
 
 .hud__help{flex:0 0 auto;width:34px;height:34px;font-family:var(--heavy);font-size:.8rem;
   cursor:pointer;background:transparent;color:var(--dim);border:2px solid var(--edge);}
-.hud__help:hover{background:var(--amber);border-color:var(--amber);color:var(--ink);}
 
 /* ---------- operative cards ---------- */
 .squad{flex:1 1 auto;display:flex;flex-wrap:nowrap;gap:.5rem;align-items:center;
@@ -128,16 +129,25 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
 .btn-act{font-family:var(--heavy);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;
   color:var(--amber);background:transparent;border:2px solid var(--amber);
   padding:.5rem .7rem;cursor:pointer;}
-.btn-act:hover:not(:disabled){background:var(--amber);color:var(--ink);}
 .btn-act--on{background:var(--amber);color:var(--ink);}
 
 .btn-end{flex:0 0 auto;font-family:var(--heavy);font-size:.82rem;letter-spacing:.08em;
   text-transform:uppercase;color:var(--ink);background:var(--dim);border:0;
   padding:.6rem 1.15rem;cursor:pointer;box-shadow:3px 3px 0 rgba(0,0,0,.55);}
-.btn-end:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:4px 4px 0 rgba(0,0,0,.55);}
 .btn-end:active:not(:disabled){transform:translate(1px,1px);box-shadow:1px 1px 0 rgba(0,0,0,.55);}
 .btn-end:disabled{background:#2e2748;color:#6d6592;box-shadow:none;cursor:default;}
 .btn-end--ready:not(:disabled){background:var(--mint);}
+
+/* Hover effects are gated: on a touch screen :hover sticks after a tap and the
+   element visibly jumps, which reads as a flash. */
+@media (hover:hover) and (pointer:fine){
+  .hud__back:hover{color:var(--ink);background:var(--dim);}
+  .hud__help:hover{background:var(--amber);border-color:var(--amber);color:var(--ink);}
+  .btn-act:hover:not(:disabled){background:var(--amber);color:var(--ink);}
+  .btn-end:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:4px 4px 0 rgba(0,0,0,.55);}
+  .btn-neon:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 rgba(0,0,0,.6);}
+  .reward:hover{border-color:var(--mint);box-shadow:4px 4px 0 var(--mint);transform:translate(-1px,-1px);}
+}
 
 /* ---------- board ---------- */
 .stagewrap{flex:1 1 auto;min-height:0;display:grid;place-items:center;position:relative;overflow:hidden;}
@@ -202,7 +212,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
   text-transform:uppercase;color:var(--ink);background:var(--mint);border:0;
   padding:.65rem 1.6rem;margin:.3rem .3rem 0 0;cursor:pointer;
   box-shadow:5px 5px 0 rgba(0,0,0,.6);}
-.btn-neon:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 rgba(0,0,0,.6);}
 .btn-neon:active{transform:translate(2px,2px);box-shadow:2px 2px 0 rgba(0,0,0,.6);}
 
 /* hostiles got there first */
@@ -213,7 +222,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
 .steal__what b{font-family:var(--heavy);color:#fff;}
 .steal__next{margin:.5rem 0 0;font-size:.72rem;color:var(--pink);}
 
-/* squad roster on the debrief */
+/* debrief lines */
+.brief__cost{margin:.4rem 0 .6rem;padding:.3rem .45rem;font-size:.78rem;
+  background:var(--pink);color:var(--ink);font-weight:600;}
+.brief__note{margin:.35rem 0 .6rem;font-size:.74rem;color:var(--mint);}
+
+/* squad roster (kept for reuse; the debrief no longer prints one) */
 .roster{margin:.9rem 0 1.1rem;border:2px solid var(--edge);}
 .roster__row{display:flex;gap:.7rem;padding:.45rem .6rem;border-bottom:2px solid var(--edge);
   align-items:baseline;font-size:.78rem;}
@@ -226,10 +240,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);
 .roster__row--foe dd{color:#ffd9ec;}
 
 /* requisition choices */
-.rewards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem;margin-top:1rem;}
-.reward{display:flex;flex-direction:column;gap:.35rem;padding:.85rem .6rem;cursor:pointer;
+.rewards{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:.6rem;margin-top:.7rem;}
+.reward{display:flex;flex-direction:column;gap:.3rem;padding:.8rem .6rem;cursor:pointer;
   background:var(--panel2);border:3px solid var(--edge);text-align:left;}
-.reward:hover{border-color:var(--mint);box-shadow:4px 4px 0 var(--mint);transform:translate(-1px,-1px);}
 .reward__icon{font-family:var(--heavy);font-size:1.5rem;line-height:1;color:var(--mint);}
 .reward__name{font-family:var(--heavy);font-size:.8rem;letter-spacing:.03em;color:#fff;}
 .reward__desc{font-size:.72rem;color:var(--dim);line-height:1.45;}
