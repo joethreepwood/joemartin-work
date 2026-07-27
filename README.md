@@ -46,6 +46,41 @@ var s = g.generateLevel(5, squad, 1);
 console.log(g.canSolve(s));   // must be true for every shipped level
 ```
 
+## Analytics
+
+[`analytics.js`](analytics.js) wires the site and the game into PostHog
+(project **JoeMartin.work**, in the Joe-OS org). Loaded with `defer` on both
+`index.html` and `game.html`.
+
+- **Cookieless.** `cookieless_mode: 'always'` — no cookies, no localStorage, no
+  consent banner needed. Visitors are counted with a hash computed on PostHog's
+  servers. This only works because "cookieless server hash mode" is also enabled
+  in the project settings; without it PostHog silently drops the events. It also
+  means `identify()` must never be called — a distinct ID would be personal data.
+- **Autocapture is off**, so every event is deliberate. Session replay and
+  exception capture are on.
+- Site events: `$pageview`, `project_section_viewed` (how far down people get),
+  `outbound_link_clicked`, `game_cta_clicked`, `email_clicked`.
+- Game events: `game_started`, `sector_started` (includes `gen_attempts` and
+  `gen_fallback`, so the solvability guarantee can be checked against real
+  players), `sector_cleared`, `upgrade_taken`, `hostile_killed` / `operative_lost`
+  with a `cause` (`void`, `blast`, `frag`, `shock`, `impact`, `gunfire`,
+  `self_detonate`), and `squad_lost`.
+
+Two things to keep in mind when editing:
+
+- **Never report from the solver.** `canSolve` plays entire games on cloned
+  states, so anything hooked into the rules layer must check `s === G` first
+  (see `reportDeath`). Otherwise one page load emits thousands of fake kills.
+- **Tracking must never break play.** Everything goes through `window.jmTrack`,
+  which no-ops if PostHog is blocked by an extension.
+
+Testing note: posthog-js deliberately opts out on bot/headless user agents, so a
+plain headless-Chrome check will show no events being sent. Pass a normal
+`--user-agent` to see real `200 /e/` ingestion responses. Also, in cookieless
+mode `has_opted_out_capturing()` reports `true` even when capture is working —
+it's an artifact of having no storage to record consent in, not a problem.
+
 ## Preview locally
 
 Just open `index.html` in a browser. (Or run `python3 -m http.server` in this

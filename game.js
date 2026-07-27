@@ -99,6 +99,32 @@
   var uidN = 0;
   function uid(p) { return p + (++uidN); }
 
+  // ---- analytics (see analytics.js) -------------------------------------
+  // Two rules, both important:
+  //  1. Never let it affect play — if PostHog is blocked, these are no-ops.
+  //  2. Never report from the solver. `canSolve` plays entire games on cloned
+  //     states, so anything keyed off the rules layer must check it is looking
+  //     at the live state (`s === G`) before reporting.
+  function track(name, props) {
+    try { if (window.jmTrack) window.jmTrack(name, props); } catch (e) {}
+  }
+  function squadInfo() {
+    return {
+      squad_size: G.squad.length,
+      weapons: G.squad.map(function (m) { return m.weaponId; }).sort().join(','),
+      grenades: G.grenades
+    };
+  }
+  function reportDeath(s, u, cause) {
+    if (s !== G) return;                    // simulated game, not a real one
+    track(u.side === 'enemy' ? 'hostile_killed' : 'operative_lost', {
+      sector: G.level,
+      turn: G.turn,
+      unit: u.side === 'enemy' ? u.typeId : 'operative',
+      cause: cause || 'gunfire'
+    });
+  }
+
   function tile(t) { return { t: t || 'floor', open: false, live: false, spent: false }; }
   function blankTiles() {
     var g = [], y, x;
@@ -270,7 +296,11 @@
     if (!u || u.hp <= 0 || n <= 0) return;
     u.hp -= n;
     note(fxq, { kind: 'dmg', x: u.x, y: u.y, n: n, label: label, side: u.side });
-    if (u.hp <= 0) { u.hp = 0; note(fxq, { kind: 'die', x: u.x, y: u.y, side: u.side }); }
+    if (u.hp <= 0) {
+      u.hp = 0;
+      note(fxq, { kind: 'die', x: u.x, y: u.y, side: u.side });
+      reportDeath(s, u, label ? label.toLowerCase() : 'gunfire');
+    }
   }
 
   function explode(s, x, y, fxq, depth) {
@@ -322,6 +352,7 @@
       if (at(s, nx, ny).t === 'pit') {
         u.hp = 0;
         note(fxq, { kind: 'fall', x: nx, y: ny, side: u.side });
+        reportDeath(s, u, 'void');
         return;
       }
     }
@@ -504,6 +535,7 @@
         }
         e.hp = 0;
         note(fxq, { kind: 'die', x: e.x, y: e.y, side: 'enemy' });
+        reportDeath(s, e, 'self_detonate');
         continue;
       }
 
@@ -880,14 +912,21 @@
   }
 
   function generateLevel(level, squad, grenades) {
+    var t0 = Date.now();
     for (var a = 0; a < GEN_TRIES; a++) {
       var seed = (Math.floor(liveRng() * 0xffffffff) ^ (level * 2654435761)) >>> 0;
       var s = buildLevel(level, squad, grenades, seed);
       if (!s) continue;
       if (!alive(s, 'player').length || !alive(s, 'enemy').length) continue;
-      if (canSolve(s)) return s;
+      if (canSolve(s)) {
+        s.gen = { attempts: a + 1, fallback: false, ms: Date.now() - t0 };
+        return s;
+      }
     }
-    return safeLevel(level, squad, grenades);
+    // Should not happen in practice — worth knowing if it ever does in the wild.
+    var f = safeLevel(level, squad, grenades);
+    f.gen = { attempts: GEN_TRIES, fallback: true, ms: Date.now() - t0 };
+    return f;
   }
 
   // ============================================================
@@ -1332,8 +1371,11 @@
   }
   function waitIdle(cb) {
     ensureTick();
-    var waited = 0;
+    var waited = 0, epoch = G.epoch;
     var iv = setInterval(function () {
+      // A new sector started while we were waiting — this callback is stale and
+      // would otherwise resolve the *new* level. Drop it.
+      if (G.epoch !== epoch) { clearInterval(iv); return; }
       waited += 60;
       if (!isBusy()) { clearInterval(iv); cb(); return; }
       if (waited > 2500) { clearInterval(iv); snapAnimations(); draw(); cb(); }
@@ -1691,11 +1733,19 @@
   ];
 
   function clearedLevel() {
+    // Reachable from both the killing blow and the end of a turn — only resolve once.
+    if (G.phase === 'REWARD' || G.phase === 'LOST') return;
     G.phase = 'REWARD';
     // survivors are patched up; anyone lost is gone for good
     var down = G.squad.filter(function (m) { var u = byId(G, m.id); return !u || u.hp <= 0; });
     G.squad = G.squad.filter(function (m) { var u = byId(G, m.id); return u && u.hp > 0; });
     if (!G.squad.length) { lost(); return; }
+
+    track('sector_cleared', Object.assign({
+      sector: G.level,
+      turns: G.turn,
+      operatives_lost: down.length
+    }, squadInfo()));
 
     var pool = REWARDS.filter(function (r) { return r.ok(); });
     for (var i = pool.length - 1; i > 0; i--) {
@@ -1720,7 +1770,14 @@
     say('Sector clear. Choose an upgrade.');
     Array.prototype.forEach.call(elPanel.querySelectorAll('[data-r]'), function (b) {
       b.addEventListener('click', function () {
-        offer[+b.getAttribute('data-r')].run();
+        var chosen = offer[+b.getAttribute('data-r')];
+        track('upgrade_taken', {
+          sector: G.level,
+          upgrade: chosen.id,
+          upgrade_name: chosen.name,
+          offered: offer.map(function (o) { return o.id; }).join(',')
+        });
+        chosen.run();
         hidePanel();
         G.level++;
         startLevel();
@@ -1729,7 +1786,14 @@
   }
 
   function lost() {
+    if (G.phase === 'LOST') return;
     G.phase = 'LOST';
+    track('squad_lost', {
+      sector: G.level,
+      sectors_cleared: G.level - 1,
+      turns: G.turn,
+      run_seconds: G.runStart ? Math.round((Date.now() - G.runStart) / 1000) : null
+    });
     showPanel(
       '<h2>Squad lost</h2>' +
       '<p>You made it to sector ' + String(G.level).padStart(2, '0') + '.</p>' +
@@ -1754,10 +1818,13 @@
     G.level = 1;
     G.grenades = 1;
     G.squad = [newOp('pistol'), newOp('shotgun')];
+    G.runStart = Date.now();
+    track('game_started', {});
     startLevel();
   }
 
   function startLevel() {
+    G.epoch = (G.epoch || 0) + 1;      // invalidates any in-flight waitIdle callbacks
     var built = generateLevel(G.level, G.squad, G.grenades);
     G.tiles = built.tiles;
     G.units = built.units;
@@ -1771,6 +1838,25 @@
     msg('');
     say('Sector ' + G.level + '. ' + alive(G, 'enemy').length + ' hostiles. Your move.');
     layout();
+
+    var foes = alive(G, 'enemy');
+    var kinds = {}, hazards = {}, x, y;
+    foes.forEach(function (e) { kinds[e.typeId] = (kinds[e.typeId] || 0) + 1; });
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var t = at(G, x, y).t;
+      if (t !== 'floor' && t !== 'wall') hazards[t] = (hazards[t] || 0) + 1;
+    }
+    track('sector_started', Object.assign({
+      sector: G.level,
+      hostiles: foes.length,
+      hostile_types: Object.keys(kinds).sort().join(','),
+      hazards: Object.keys(hazards).sort().join(',') || 'none',
+      pits: hazards.pit || 0,
+      barrels: hazards.barrel || 0,
+      gen_attempts: built.gen ? built.gen.attempts : null,
+      gen_fallback: built.gen ? built.gen.fallback : null,
+      gen_ms: built.gen ? built.gen.ms : null
+    }, squadInfo()));
   }
 
   // ============================================================
