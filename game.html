@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Null Sector — a game by Joe Martin</title>
+  <meta name="description" content="Null Sector — a small, turn-based cyberpunk tactics game. Into the Breach by way of Fallout. Plays in your browser, mouse only.">
+
+  <meta property="og:title" content="Null Sector">
+  <meta property="og:description" content="A small, turn-based cyberpunk tactics game. Plays in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://joemartin.work/game.html">
+
+  <link rel="icon" href="images/favicon.png">
+
+  <!-- Fonts (same families as the main site) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=VT323&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="game.css">
+</head>
+<body>
+  <div class="tac-app" data-app>
+
+    <!-- top HUD -->
+    <header class="hud hud--top" data-hud-top>
+      <div class="hud__left">
+        <a class="hud__back" href="./" aria-label="Back to joemartin.work">&larr; joemartin.work</a>
+      </div>
+      <div class="hud__mid">
+        <span class="hud__title">NULL SECTOR</span>
+        <span class="hud__sector" data-sector>SECTOR 01</span>
+      </div>
+      <div class="hud__right">
+        <span class="hud__turn" data-turn>TURN 1</span>
+      </div>
+    </header>
+
+    <!-- the board -->
+    <div class="stagewrap">
+      <canvas id="stage" data-stage aria-label="Tactics grid. Mouse only." role="img"></canvas>
+    </div>
+
+    <!-- bottom HUD: squad + actions -->
+    <footer class="hud hud--bottom" data-hud-bottom>
+      <div class="squad" data-squad aria-label="Your squad"></div>
+      <div class="hud__msg" data-msg aria-live="polite"></div>
+      <div class="hud__acts" data-acts></div>
+      <button class="btn-end" type="button" data-end disabled>End turn</button>
+    </footer>
+
+    <!-- modal overlay: title / reward / game over -->
+    <div class="overlay" data-overlay hidden>
+      <div class="panel" data-panel></div>
+    </div>
+
+    <!-- screen-reader status -->
+    <span class="sr-only" aria-live="polite" data-live></span>
+
+    <!-- shown only on extremely small viewports -->
+    <div class="toosmall">Give the window a little more room to deploy.<br>Null Sector needs a slightly bigger screen.</div>
+  </div>
+
+  <script src="game.js" defer></script>
+</body>
+</html>

@@ -14,6 +14,38 @@ My personal site. Plain HTML/CSS, no build step, hosted free on GitHub Pages.
 - **Embeds** (YouTube, etc.): drop an `<iframe>` inside a section's
   `<div class="entry__media">` in place of the `<img>`.
 
+## Null Sector (the game)
+
+A turn-based tactics game that runs in the browser. It's a separate page, since
+it needs the whole viewport and mustn't scroll — [`game.html`](game.html),
+[`game.css`](game.css), [`game.js`](game.js). Section 12 of `index.html` links
+to it. Same rules as the rest of the site: no build step, no dependencies.
+
+`game.js` is one IIFE split into numbered sections (config, RNG, data, rules,
+enemy AI, generation, verifier, render, input, turn controller). Two things
+worth knowing before changing it:
+
+- **Levels are generated, then proved.** `buildLevel` composes a sector against
+  a power budget and plants at least one dice-free kill (a pit behind a hostile).
+  `canSolve` then *plays* the level with pessimistic dice — the player only
+  trusts shots at 60%+ and rolls minimum damage, hostiles always hit and roll
+  maximum. Only levels the solver beats ever ship. Retries 40 times, then falls
+  back to `safeLevel`.
+- **Combat rolls; the room doesn't.** Gunfire has a hit chance, but knockback,
+  pits, barrels, frags and the shock prod are all deterministic. That's what
+  keeps a bad streak from making a sector unwinnable — don't make the
+  environment random.
+
+To sanity-check the generator after edits, `game.js` exports its internals under
+Node (invisible in browsers), so you can hammer it headlessly:
+
+```js
+var g = require('./game.js');
+var squad = [{id:'op1',name:'VEX',maxHp:5,move:3,weaponId:'pistol'}];
+var s = g.generateLevel(5, squad, 1);
+console.log(g.canSolve(s));   // must be true for every shipped level
+```
+
 ## Preview locally
 
 Just open `index.html` in a browser. (Or run `python3 -m http.server` in this

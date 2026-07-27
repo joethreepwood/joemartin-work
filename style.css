@@ -241,6 +241,35 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .news__media img{width:100%;border:1px solid #cfc8b6;border-radius:8px;box-shadow:0 16px 40px rgba(23,20,15,.22);display:block;}
 .news__go{display:inline-block;margin-top:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#b23b2e;text-decoration:none;border-bottom:1px solid #b23b2e;}
 
+/* ============ 12 Null Sector — neon tactics grid ============ */
+.tac{position:relative;border-radius:14px;overflow:hidden;padding:2rem;color:#eafcff;border:1px solid #35204d;
+     background:radial-gradient(120% 130% at 85% 0%, #1b1140, #08060f 70%);
+     display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;align-items:center;}
+.tac::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+            background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 2px 4px);}
+.tac__text{position:relative;z-index:1;}
+.tac__text h2{font-family:var(--pixel);font-weight:400;font-size:clamp(2.4rem,6vw,3.4rem);line-height:1;
+              letter-spacing:.03em;margin-bottom:.5rem;
+              background:linear-gradient(90deg,#ff2d95,#00e5ff);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.tac__text p{font-family:var(--mono);color:#cfc7e6;font-size:.84rem;line-height:1.6;margin:0 0 .85rem;max-width:46ch;}
+.tac__go{display:inline-block;margin-top:.4rem;font-family:var(--pixel);font-size:1.4rem;color:#8affc0;text-decoration:none;}
+.tac__go:hover{text-shadow:0 0 10px #8affc0;}
+/* decorative board — a still frame of a fight, not the real game */
+.tac__view{position:relative;z-index:1;}
+.tac__grid{position:relative;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(6,1fr);
+           aspect-ratio:1/1;border:1px solid #2b1f52;border-radius:8px;overflow:hidden;background:#120e24;
+           background-image:linear-gradient(to right,#1f1740 1px,transparent 1px),
+                            linear-gradient(to bottom,#1f1740 1px,transparent 1px);
+           background-size:calc(100%/6) calc(100%/6);
+           box-shadow:inset 0 0 40px rgba(0,229,255,.06);}
+.tac__grid > i{grid-column:calc(var(--gx) + 1);grid-row:calc(var(--gy) + 1);margin:14%;border-radius:2px;}
+.tac__op{background:rgba(0,229,255,.18);box-shadow:inset 0 0 0 1px #00e5ff,0 0 12px rgba(0,229,255,.5);}
+.tac__en{background:rgba(255,45,149,.18);box-shadow:inset 0 0 0 1px #ff2d95,0 0 12px rgba(255,45,149,.5);}
+.tac__grid > i.tac__barrel{background:rgba(255,154,45,.2);box-shadow:inset 0 0 0 1px #ff9a2d,0 0 12px rgba(255,154,45,.45);border-radius:50%;}
+/* terrain sits flush in its cell rather than floating like a token */
+.tac__void{margin:4%;background:#040309;box-shadow:inset 0 0 0 2px rgba(255,45,149,.4);}
+.tac__wall{margin:4%;background:#2b2350;box-shadow:inset 0 3px 0 #483c7a;}
+
 /* ============ Carousel (used inside The Vigil) ============ */
 .carousel{position:relative;}
 .carousel__track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
@@ -261,7 +290,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 
 /* ---------- responsive ---------- */
 @media(max-width:820px){
-  .ph__body,.ik__body,.la,.crt,.quiz,.cy,.paint__canvas,.pol,.arc,.news{grid-template-columns:1fr;}
+  .ph__body,.ik__body,.la,.crt,.quiz,.cy,.paint__canvas,.pol,.arc,.news,.tac{grid-template-columns:1fr;}
   .pod__player{flex-direction:column;align-items:flex-start;}
   .ik__diagram{position:static;}
   .crt__view{order:-1;}
