@@ -256,19 +256,9 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .tac__go:hover{text-shadow:0 0 10px #8affc0;}
 /* decorative board — a still frame of a fight, not the real game */
 .tac__view{position:relative;z-index:1;}
-.tac__grid{position:relative;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(6,1fr);
-           aspect-ratio:1/1;border:1px solid #2b1f52;border-radius:8px;overflow:hidden;background:#120e24;
-           background-image:linear-gradient(to right,#1f1740 1px,transparent 1px),
-                            linear-gradient(to bottom,#1f1740 1px,transparent 1px);
-           background-size:calc(100%/6) calc(100%/6);
-           box-shadow:inset 0 0 40px rgba(0,229,255,.06);}
-.tac__grid > i{grid-column:calc(var(--gx) + 1);grid-row:calc(var(--gy) + 1);margin:14%;border-radius:2px;}
-.tac__op{background:rgba(0,229,255,.18);box-shadow:inset 0 0 0 1px #00e5ff,0 0 12px rgba(0,229,255,.5);}
-.tac__en{background:rgba(255,45,149,.18);box-shadow:inset 0 0 0 1px #ff2d95,0 0 12px rgba(255,45,149,.5);}
-.tac__grid > i.tac__barrel{background:rgba(255,154,45,.2);box-shadow:inset 0 0 0 1px #ff9a2d,0 0 12px rgba(255,154,45,.45);border-radius:50%;}
-/* terrain sits flush in its cell rather than floating like a token */
-.tac__void{margin:4%;background:#040309;box-shadow:inset 0 0 0 2px rgba(255,45,149,.4);}
-.tac__wall{margin:4%;background:#2b2350;box-shadow:inset 0 3px 0 #483c7a;}
+.tac__view img{width:100%;display:block;border:1px solid #2b1f52;border-radius:8px;
+           box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 0 40px rgba(0,229,255,.05);
+           image-rendering:auto;}
 
 /* ============ Carousel (used inside The Vigil) ============ */
 .carousel{position:relative;}
