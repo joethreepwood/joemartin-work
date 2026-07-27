@@ -36,6 +36,13 @@ worth knowing before changing it:
   keeps a bad streak from making a sector unwinnable — don't make the
   environment random.
 
+Blast doors are placed **last** in `buildLevel`, after `connectAll` and the
+kill-lever step, and only in a tile flanked by solid ground on both sides. They
+used to be dropped on a random floor tile — which is why a player reported they
+"did nothing": a sealed door standing in open ground blocks nothing. Placement
+also has to come after the connectivity pass, because that pass demolishes walls
+and can remove the doorway from under the door.
+
 Geometry: **feet are 4-way, eyes are 8-way.** Movement uses `DIRS` (orthogonal
 steps, Manhattan `dist`) because 4-way pathing keeps the solver cheap and the
 board readable. Aiming uses `AIM` (all eight directions) and Chebyshev `cheb`,
@@ -73,6 +80,17 @@ On the interface side, four conventions worth preserving:
   tile commits it. `resolveIntent` is the single place that decides what a click
   means, and `previewShot` is the single place that describes the outcome — so
   the panel, the on-board markers and the committed result can't disagree.
+- **Hostiles telegraph movement, not aim.** `drawIntents` renders the walk and
+  the destination and nothing else — no firing lines, no reticles on targets, no
+  hatched threat cells. Consequence is read off your own squad instead:
+  `threatTo(u)` totals everything about to land on an operative (every attacker,
+  blast AoE, plus shove-into-wall impact, and it flags a shove into the void as
+  certain death), `drawThreat` puts that single number over the operative, and
+  the at-risk hull is marked on their card. It reports the **worst case**
+  deliberately — the whole point is that a player can never be wiped by damage
+  they had no way to add up. Two hostiles each telegraphing "2" against a 3-hull
+  operative used to be an invisible death; verified across 40 turns that actual
+  damage never exceeds the forecast, and 12/12 lethal flags really died.
 - **To-hit lives on the board.** `drawOdds` runs last in `draw()`, after the
   enemy intent labels, because both want the same strip of pixels and the
   player's own odds must win. Combat numbers used to live in the bottom status

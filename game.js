@@ -784,11 +784,6 @@
         if (cp) s.tiles[cp.y][cp.x] = tile('console');
       }
     }
-    if (level >= 4 && rng() < 0.6) {              // a blast door in a wall run
-      var dp = freeSpot(1, H - 3);
-      if (dp) { s.tiles[dp.y][dp.x] = tile('door'); s.tiles[dp.y][dp.x].open = false; }
-    }
-
     // --- guarantee a dice-free kill line: put a pit behind an enemy, with a
     //     clear lane on the opposite side for someone to shove from. ---
     var lever = false;
@@ -812,6 +807,29 @@
     var must = alive(s, 'player').map(function (o) { return { x: o.x, y: o.y }; })
       .concat(enemies.map(function (o) { return { x: o.x, y: o.y }; }));
     connectAll(s, must);
+
+    // Placed last, on purpose: connectAll() and the kill-lever step both move
+    // walls around, so a doorway identified any earlier can be demolished out
+    // from under the door.
+    // A blast door is only worth anything in an actual doorway. This used to drop
+    // one on a random floor tile, so it stood in open ground and sealing it
+    // blocked nothing — players reasonably concluded doors did nothing at all.
+    // Now we only place one in a gap that is flanked by solid ground on both
+    // sides, so sealing it really does cut the lane. No gap, no door.
+    if (level >= 4 && rng() < 0.75) {
+      var gaps = [];
+      for (y = 1; y < H - 2; y++) for (x = 1; x < W - 1; x++) {
+        if (at(s, x, y).t !== 'floor' || unitAt(s, x, y)) continue;
+        var vert = blocksSight(s, x - 1, y) && blocksSight(s, x + 1, y);
+        var horiz = blocksSight(s, x, y - 1) && blocksSight(s, x, y + 1);
+        if (vert || horiz) gaps.push({ x: x, y: y });
+      }
+      if (gaps.length) {
+        var dp = pick(rng, gaps);
+        s.tiles[dp.y][dp.x] = tile('door');
+        s.tiles[dp.y][dp.x].open = true;      // open on arrival; sealing it is the play
+      }
+    }
 
     computeIntents(s);
     return s;
@@ -1240,27 +1258,9 @@
   function drawHighlights() {
     var u = selected(), T = G.tile, k;
 
-    // where the enemies are about to strike
-    var es = alive(G, 'enemy');
-    for (var i = 0; i < es.length; i++) {
-      var it = es[i].intent;
-      if (!it || !it.cells) continue;
-      for (k = 0; k < it.cells.length; k++) {
-        var c = it.cells[k];
-        if (!inB(c.x, c.y)) continue;
-        fillCell(c.x, c.y, 'rgba(255,45,149,.14)');
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,45,149,.34)'; ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (var h = -T; h < T; h += 7) {
-          ctx.moveTo(c.x * T + h, c.y * T);
-          ctx.lineTo(c.x * T + h + T, c.y * T + T);
-        }
-        ctx.save(); ctx.beginPath();
-        ctx.rect(c.x * T + 1, c.y * T + 1, T - 2, T - 2); ctx.clip();
-        ctx.stroke(); ctx.restore(); ctx.restore();
-      }
-    }
+    // Hostiles advertise movement only, so there is no attack geometry drawn
+    // here any more. What a hostile does once it arrives is read off the damage
+    // total over each operative (drawThreat) instead of hatched cells and lines.
 
     if (!u || G.phase !== 'PLAYER') return;
 
@@ -1327,6 +1327,30 @@
       ctx.setLineDash([]); noNeon();
       var last = G.ui.path[G.ui.path.length - 1];
       ringCell(last.x, last.y, C.ally, 2);
+    }
+  }
+
+  // One badge per threatened operative: everything about to land on them.
+  function drawThreat() {
+    if (G.phase !== 'PLAYER') return;
+    var T = G.tile, ops = alive(G, 'player');
+    for (var i = 0; i < ops.length; i++) {
+      var u = ops[i], th = threatTo(u);
+      if (!th.count) continue;
+      var text = th.voided ? 'VOID' : (th.lethal ? 'KILLS ' : '−') + th.dmg;
+      var col = th.lethal ? C.enemy : C.warn;
+      fontData(.30);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      var w = ctx.measureText(text).width + 10, bh = T * .28;
+      var px = clampX(cx(u.rx), w), py = u.ry * T;
+      if (th.lethal) {                        // outline as well as colour
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.strokeRect(px - w / 2 - 1, py - bh - 1, w + 2, bh + 2);
+      }
+      ctx.fillStyle = col;
+      ctx.fillRect(px - w / 2, py - bh, w, bh);
+      ctx.fillStyle = C.ink;
+      ctx.fillText(text, px, py - bh * .16);
     }
   }
 
@@ -1482,28 +1506,6 @@
         var d2 = it.dest;
         ctx.strokeStyle = 'rgba(255,45,149,.6)'; ctx.lineWidth = 1;
         ctx.strokeRect(d2.x * T + 4.5, d2.y * T + 4.5, T - 9, T - 9);
-      }
-      // the strike it plans
-      if (it.kind === 'attack') {
-        var from = it.dest || { x: e.x, y: e.y };
-        ctx.strokeStyle = C.enemy; ctx.lineWidth = 2; neon(C.enemy, 10);
-        ctx.beginPath(); ctx.moveTo(cx(from.x), cy(from.y)); ctx.lineTo(cx(it.tx), cy(it.ty)); ctx.stroke();
-        noNeon();
-        reticle(it.tx, it.ty, C.enemy);
-        // boxed, so it stays readable over whatever is beneath it
-        fontData(.28);
-        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        var lbl = (it.pct >= 100 ? 'SURE' : it.pct + '%') + '\u2009' + it.dmg;
-        var lw = ctx.measureText(lbl).width + 10, lh = T * .28;
-        var lx = clampX(cx(it.tx), lw);
-        ctx.fillStyle = C.enemy;
-        ctx.fillRect(lx - lw / 2, it.ty * T - lh, lw, lh);
-        ctx.fillStyle = C.ink;
-        ctx.fillText(lbl, lx, it.ty * T - lh * .16);
-      }
-      if (it.kind === 'detonate') {
-        var cells = it.cells;
-        for (var c = 0; c < cells.length; c++) { fillCell(cells[c].x, cells[c].y, 'rgba(255,154,45,.28)'); ringCell(cells[c].x, cells[c].y, C.barrel, 2); }
       }
     }
   }
@@ -1670,6 +1672,7 @@
     drawIntents();
     var us = alive(G, 'player').concat(alive(G, 'enemy'));
     for (var i = 0; i < us.length; i++) drawUnit(us[i]);
+    drawThreat();             // one total per threatened operative
     drawOdds(selected());     // last, so nothing can cover the to-hit numbers
     drawFx();
     // frame the board so it reads as a piece of equipment, not a bleed
@@ -1872,8 +1875,10 @@
       G.ui.pending ? G.ui.pending.key : '-',
       alive(G, 'enemy').length].concat(G.squad.map(function (m) {
         var u = byId(G, m.id);
+        var inc = (u && u.hp > 0) ? threatTo(u) : { dmg: 0, lethal: false };
         return [m.name, m.weaponId, m.move, (m.perks || []).join('+'), u ? u.hp : -1, u ? u.maxHp : -1,
-          u ? (u.hasMoved ? 1 : 0) + (u.hasActed ? 2 : 0) : 0, u ? u.disabled : 0].join('.');
+          u ? (u.hasMoved ? 1 : 0) + (u.hasActed ? 2 : 0) : 0, u ? u.disabled : 0,
+          inc.dmg, inc.lethal ? 1 : 0].join('.');
       })).join('|');
     if (sig === hudSig) return;
     hudSig = sig;
@@ -1897,8 +1902,17 @@
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip' + (G.ui.selId === m.id ? ' chip--sel' : '') + (u && u.hp > 0 ? (done(u) ? ' chip--done' : '') : ' chip--down');
+      // Pips about to be lost are marked, so the danger is on the card as well
+      // as on the board — you should not have to look in two places to survive.
+      var inc = (u && u.hp > 0 && G.phase === 'PLAYER') ? threatTo(u) : { dmg: 0, lethal: false };
+      var atRisk = Math.min(u ? u.hp : 0, inc.dmg);
       var pips = '';
-      if (u) for (var i = 0; i < u.maxHp; i++) pips += '<i class="chip__pip' + (i < u.hp ? '' : ' chip__pip--empty') + '"></i>';
+      if (u) for (var i = 0; i < u.maxHp; i++) {
+        var cls = 'chip__pip';
+        if (i >= u.hp) cls += ' chip__pip--empty';
+        else if (i >= u.hp - atRisk) cls += inc.lethal ? ' chip__pip--dead' : ' chip__pip--risk';
+        pips += '<i class="' + cls + '"></i>';
+      }
       var canMove = u && u.hp > 0 && !u.hasMoved && !u.disabled;
       var canAct = u && u.hp > 0 && !u.hasActed && !u.disabled;
       var perks = (m.perks && m.perks.length) ? '<span class="chip__perk" title="' + m.perks.join(', ') + '">▲' + m.perks.length + '</span>' : '';
@@ -1988,6 +2002,49 @@
     return null;
   }
 
+  // What is about to land on this operative, totalled across every hostile.
+  // Players had no way to add this up: two hostiles each telegraphing "2" against
+  // a 3-hull operative is a death you cannot see coming. Reports the worst case
+  // on purpose — that is the number that prevents a squad wipe.
+  function threatTo(u) {
+    var out = { dmg: 0, count: 0, lethal: false, voided: false, sure: true };
+    if (!u || u.hp <= 0) return out;
+    var es = alive(G, 'enemy');
+    for (var i = 0; i < es.length; i++) {
+      var e = es[i], it = e.intent;
+      if (!it) continue;
+
+      if (it.kind === 'detonate') {
+        for (var c = 0; c < it.cells.length; c++) {
+          if (it.cells[c].x === u.x && it.cells[c].y === u.y) { out.dmg += it.dmg; out.count++; }
+        }
+        continue;
+      }
+      if (it.kind !== 'attack' || it.targetId !== u.id) continue;
+
+      out.count++;
+      out.dmg += it.dmg;
+      if (it.pct < 100) out.sure = false;
+
+      // Shoves are deterministic, so a hostile that can push you into the void
+      // is a certain kill however much hull you are carrying.
+      if (e.atk.kb) {
+        var from = it.dest || { x: e.x, y: e.y };
+        var dx = Math.sign(u.x - from.x), dy = Math.sign(u.y - from.y);
+        var n = e.atk.kb - (u.kbResist || 0), cx2 = u.x, cy2 = u.y;
+        for (var k = 0; k < n; k++) {
+          var nx = cx2 + dx, ny = cy2 + dy;
+          if (!inB(nx, ny) || blocksKnock(G, nx, ny) || unitAt(G, nx, ny)) { out.dmg += BONK_DMG; break; }
+          cx2 = nx; cy2 = ny;
+          if (at(G, cx2, cy2).t === 'pit') { out.voided = true; break; }
+        }
+      }
+    }
+    if (u.soak && out.count) out.dmg = Math.max(out.count, out.dmg - u.soak * out.count);
+    out.lethal = out.voided || (out.count > 0 && out.dmg >= u.hp);
+    return out;
+  }
+
   function threatened(x, y) {
     var es = alive(G, 'enemy');
     for (var i = 0; i < es.length; i++) {
@@ -2019,18 +2076,22 @@
       d.rows.push(['Hull', u.hp + ' / ' + u.maxHp]);
       d.rows.push(['Move', def.move]);
       d.rows.push(['Its attack', def.atk.range === 0
-        ? 'blast ' + def.atk.dmgMax
-        : def.atk.dmgMax + ' dmg @ ' + def.atk.range]);
+        ? 'blast ' + u.atk.dmgMax
+        : u.atk.dmgMax + ' dmg @ ' + u.atk.range]);
+      d.rows.push(['Its turn', 'moves, then attacks once']);
+      if (u.atk.kb) d.rows.push(['Its shove', u.atk.kb + ' tile' + (u.atk.kb === 1 ? '' : 's')]);
       if (def.kbResist) d.rows.push(['Braced', '−' + def.kbResist + ' shove']);
       if (G.foe.taken.length) d.perks = foeLabels();
       if (u.atk.disable && !def.atk.disable) d.warn.push('Its hits disable your operative.');
       if (G.foe.shrapnel) d.warn.push('Bursts for 1 when killed. Do not stand next to it.');
       if (u.stunned) d.warn.push('Stunned. Skips its next turn.');
-      if (u.armed) d.warn.push('Armed. Detonates on its next turn.');
-      if (u.intent && u.intent.kind === 'attack') {
-        var v = byId(G, u.intent.targetId);
-        d.warn.push('Will hit ' + (v ? v.name : 'someone') + ' for ' + u.intent.dmg +
-          (u.intent.pct >= 100 ? ' — certain.' : ' at ' + u.intent.pct + '%.'));
+      if (u.armed) d.warn.push('Armed. Detonates next turn across its own tile and the four beside it.');
+      // Hostiles advertise movement, not aim, so what it will hit is not stated
+      // here. The damage total sits over the operative who is going to take it.
+      if (u.intent && u.intent.path && u.intent.path.length) {
+        d.rows.push(['Moving', u.intent.path.length + ' tile' + (u.intent.path.length === 1 ? '' : 's')]);
+      } else {
+        d.rows.push(['Moving', 'holding position']);
       }
     } else if (u && u.side === 'player') {
       var wp = gun(u);
@@ -2051,15 +2112,24 @@
       d.note = wp.blurb;
       d.perks = perkList(u);
       if (u.disabled) d.warn.push('Hacked. Cannot act this turn.');
+      var inc = threatTo(u);
+      if (inc.count) {
+        d.rows.push(['Incoming', (inc.sure ? '' : 'up to ') + inc.dmg + ' of ' + u.hp +
+          ' from ' + inc.count + ' hostile' + (inc.count === 1 ? '' : 's')]);
+        if (inc.voided) d.warn.push('A shove would put them in the void. Certain death.');
+        else if (inc.lethal) d.warn.push('This kills them. Move, or remove the threat.');
+      }
       var th = threatened(u.x, u.y);
-      if (th) d.warn.push('In ' + ENEMIES[th.typeId].name + '’s firing line.');
+      if (th && !inc.count) d.warn.push(ENEMIES[th.typeId].name + ' can reach this tile.');
     } else {
       var TERRAIN = {
         pit: ['Void', 'Shove anything in and it is gone. No dice.'],
         barrel: ['Fuel barrel', BLAST_DMG + ' damage in a cross. Chains.'],
         water: ['Coolant', 'Harmless until charged — then ' + SHOCK_DMG + ' damage.'],
         console: ['Console', tt.spent ? 'Burned out.' : 'Charges every coolant pool.'],
-        door: ['Blast door', tt.open ? 'Open.' : 'Sealed.'],
+        door: ['Blast door', tt.open
+          ? 'Open. Seal it to cut this lane — nothing moves or shoots through.'
+          : 'Sealed. Blocks movement and every line of fire.'],
         wall: ['Bulkhead', 'Stops movement and fire. Gives cover.'],
         floor: ['Deck', '']
       };
@@ -2112,14 +2182,16 @@
         d.confirm = { text: armed ? 'Again to throw' : 'Tap to aim', state: armed ? (mine ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'interact') {
         a.tag = it.ikind === 'console' ? 'Console' : 'Blast door';
-        a.rows.push(['Effect', it.ikind === 'console' ? 'electrify all coolant' : (at(G, it.x, it.y).open ? 'seal it' : 'open it')]);
+        a.rows.push(['Effect', it.ikind === 'console'
+          ? 'electrify all coolant'
+          : (at(G, it.x, it.y).open ? 'seal the lane' : 'open the lane')]);
         d.confirm = { text: armed ? 'Again to use' : 'Tap to use', state: armed ? 'ready' : 'wait' };
       } else if (it.kind === 'move') {
         a.tag = 'Move order';
         a.bigs = [{ v: String(it.steps), label: 'tiles', cls: '' },
                   { v: String(sel.move - it.steps), label: 'spare', cls: '' }];
         var thr = threatened(it.x, it.y);
-        if (thr) a.warn.push('That tile is inside ' + ENEMIES[thr.typeId].name + '’s planned attack.');
+        if (thr) a.warn.push(ENEMIES[thr.typeId].name + ' can reach that tile.');
         if (at(G, it.x, it.y).t === 'water') a.warn.push('Coolant. Risky if anything electrifies it.');
         d.confirm = { text: armed ? 'Again to move' : 'Tap to move', state: armed ? (thr ? 'danger' : 'ready') : 'wait' };
       }
@@ -2421,11 +2493,13 @@
     return '<div class="how__row"><span class="how__n">' + n + '</span><p class="how__t">' + html + '</p></div>';
   }
   var RULES = '<div class="how">' +
-    rule(1, '<b>One move, one action</b> each turn. The square and circle under a token are what is left.') +
+    rule(1, '<b>Each operative gets a move AND an action</b>, every turn. The square and circle under a token are the two you still have.') +
     rule(2, '<b>Tap once to aim, again to commit.</b> The first tap shows the numbers.') +
     rule(3, '<b>Guns fire eight ways.</b> Diagonals count. Bulkheads stop a shot.') +
-    rule(4, '<s>Guns roll. The room never does.</s> Shove anything into the void and it is gone.') +
-    rule(5, '<b>Hostiles draft too.</b> Every second sector they reach the crate first and take the best thing in it.') +
+    rule(4, '<b>Hostiles telegraph where they move, not what they aim at.</b> The dashed line is the walk they have planned; each one moves, then attacks once.') +
+    rule(5, '<b>Read the danger off your own squad.</b> The number over an operative is the <em>total</em> about to land on them from every hostile at once. Red means it kills them.') +
+    rule(6, '<s>Guns roll. The room never does.</s> Shove anything into the void and it is gone.') +
+    rule(7, '<b>Hostiles draft too.</b> Every second sector they reach the crate first and take the best thing in it.') +
     '</div>';
 
   function titleScreen() {

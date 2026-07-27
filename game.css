@@ -112,6 +112,9 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 .chip__hp{display:inline-flex;gap:2px;align-items:center;}
 .chip__pip{width:8px;height:15px;background:var(--mint);}
 .chip__pip--empty{background:transparent;box-shadow:inset 0 0 0 2px rgba(138,255,192,.3);}
+/* hull the hostiles are about to take off this operative */
+.chip__pip--risk{background:var(--amber);}
+.chip__pip--dead{background:var(--pink);}
 .chip__perk{font-family:var(--heavy);font-size:.6rem;letter-spacing:.06em;
   background:var(--amber);color:var(--ink);padding:.12rem .28rem;}
 
