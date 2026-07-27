@@ -16,7 +16,7 @@
   <!-- Fonts (same families as the main site) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=VT323&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="game.css">
 </head>
@@ -26,15 +26,16 @@
     <!-- top HUD -->
     <header class="hud hud--top" data-hud-top>
       <div class="hud__left">
-        <a class="hud__back" href="./" aria-label="Back to joemartin.work">&larr; joemartin.work</a>
+        <a class="hud__back" href="./" aria-label="Back to joemartin.work">&larr; JOEMARTIN.WORK</a>
       </div>
       <div class="hud__mid">
         <span class="hud__title">NULL SECTOR</span>
-        <span class="hud__sector" data-sector>SECTOR 01</span>
       </div>
       <div class="hud__right">
-        <span class="hud__turn" data-turn>TURN 1</span>
-        <button class="hud__help" type="button" data-help aria-label="How to play">?</button>
+        <span class="stat"><b data-sector>01</b><i>SECTOR</i></span>
+        <span class="stat"><b data-turn>1</b><i>TURN</i></span>
+        <span class="stat stat--foe"><b data-foes>0</b><i>HOSTILE</i></span>
+        <button class="hud__help" type="button" data-help aria-label="Field manual">MANUAL</button>
       </div>
     </header>
 

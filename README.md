@@ -36,7 +36,16 @@ worth knowing before changing it:
   keeps a bad streak from making a sector unwinnable — don't make the
   environment random.
 
-On the interface side, two conventions worth preserving:
+Geometry: **feet are 4-way, eyes are 8-way.** Movement uses `DIRS` (orthogonal
+steps, Manhattan `dist`) because 4-way pathing keeps the solver cheap and the
+board readable. Aiming uses `AIM` (all eight directions) and Chebyshev `cheb`,
+so a diagonal neighbour is one tile away rather than two — anything else makes
+standing corner-to-corner with a hostile feel broken. Diagonal shots can't
+squeeze through a corner gap: if both tiles flanking the step block sight, the
+shot stops. Don't mix the two distance functions up; `cheb` is for range,
+falloff, cover and "adjacent", `dist` is for walking.
+
+On the interface side, three conventions worth preserving:
 
 - **Every committing action is two-stage.** The first click on a tile *arms* an
   intent (`G.ui.pending`) and shows the numbers; the second click on the same
@@ -48,6 +57,12 @@ On the interface side, two conventions worth preserving:
   player's own odds must win. Combat numbers used to live in the bottom status
   bar, where `text-overflow: ellipsis` silently cut off the hit chance — don't
   put anything load-bearing back there.
+- **The chrome is a Blendo pass, the board is not.** Panels are flat blocks with
+  hard edges, solid offset shadows, stencilled `.tab` labels, dotted-leader
+  `.led` rows and `.big` figures — field equipment, not a hologram. Archivo
+  Black for labels, IBM Plex Mono for figures. The neon glow is reserved for the
+  board itself, which is the only place it means anything. If you add UI, add it
+  in that language rather than reaching for another gradient.
 
 To sanity-check the generator after edits, `game.js` exports its internals under
 Node (invisible in browsers), so you can hammer it headlessly:

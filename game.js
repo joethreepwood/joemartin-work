@@ -140,7 +140,12 @@
 
   function inB(x, y) { return x >= 0 && y >= 0 && x < W && y < H; }
   function at(s, x, y) { return s.tiles[y][x]; }
+  // Walking distance — feet stay on the 4-way grid.
   function dist(ax, ay, bx, by) { return Math.abs(ax - bx) + Math.abs(ay - by); }
+  // Sight distance. Eyes and guns work in 8 directions, so a diagonal
+  // neighbour is one tile away, not two. Range, falloff and "adjacent" all
+  // use this — otherwise standing corner-to-corner with something feels broken.
+  function cheb(ax, ay, bx, by) { return Math.max(Math.abs(ax - bx), Math.abs(ay - by)); }
 
   function blocksMove(s, x, y) {
     var t = at(s, x, y).t;
@@ -243,15 +248,25 @@
     return f;
   }
 
-  var DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  var DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];                   // walking: four ways
+  var AIM = [                                                      // aiming: all eight
+    [0, -1], [1, -1], [1, 0], [1, 1],
+    [0, 1], [-1, 1], [-1, 0], [-1, -1]
+  ];
 
-  // Walk one orthogonal lane. Units and shootable barrels are targets;
-  // walls, consoles and shut doors stop the shot.
+  // Walk one lane, orthogonal or diagonal. Units and shootable barrels are
+  // targets; walls, consoles and shut doors stop the shot.
   function lineScan(s, fx, fy, dx, dy, range, pierce) {
     var hits = [], barrel = null;
     for (var i = 1; i <= range; i++) {
       var x = fx + dx * i, y = fy + dy * i;
       if (!inB(x, y)) break;
+      // Diagonals can't squeeze through a corner gap: if both tiles flanking
+      // the step are solid, the shot is blocked. Keeps walls feeling solid.
+      if (dx && dy) {
+        var ax = x - dx, ay = y, bx = x, by = y - dy;
+        if (inB(ax, ay) && inB(bx, by) && blocksSight(s, ax, ay) && blocksSight(s, bx, by)) break;
+      }
       if (at(s, x, y).t === 'barrel') { barrel = { x: x, y: y }; break; }
       if (blocksSight(s, x, y)) break;
       var u = unitAt(s, x, y);
@@ -263,28 +278,32 @@
   // Everything this shooter could hit from (fx,fy). One entry per lane.
   function shotsFrom(s, fx, fy, w) {
     var out = [];
-    for (var d = 0; d < 4; d++) {
-      var sc = lineScan(s, fx, fy, DIRS[d][0], DIRS[d][1], w.range, w.pierce);
+    for (var d = 0; d < AIM.length; d++) {
+      var sc = lineScan(s, fx, fy, AIM[d][0], AIM[d][1], w.range, w.pierce);
       if (sc.hits.length) out.push({ dir: d, kind: 'unit', hits: sc.hits, x: sc.hits[0].x, y: sc.hits[0].y });
       if (sc.barrel) out.push({ dir: d, kind: 'barrel', hits: [], x: sc.barrel.x, y: sc.barrel.y });
     }
     return out;
   }
 
-  // Hugging real cover side-on — perpendicular to the firing lane — makes you
-  // harder to hit. The edge of the map is not cover, and nothing gives cover
-  // against an adjacent attacker.
+  // Hugging real cover makes you harder to hit. For a straight lane that means
+  // solid ground to either side; for a diagonal, the two tiles the shot had to
+  // thread between. The map edge is not cover, and nothing shields you from
+  // something standing right next to you.
   function coverPen(s, fx, fy, tx, ty) {
-    if (dist(fx, fy, tx, ty) <= 1) return 0;
-    var perp = (fy === ty) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]];
-    for (var i = 0; i < 2; i++) {
-      var x = tx + perp[i][0], y = ty + perp[i][1];
+    if (cheb(fx, fy, tx, ty) <= 1) return 0;
+    var dx = Math.sign(tx - fx), dy = Math.sign(ty - fy), flank;
+    if (dx && dy) flank = [[-dx, 0], [0, -dy]];
+    else if (dy) flank = [[-1, 0], [1, 0]];
+    else flank = [[0, -1], [0, 1]];
+    for (var i = 0; i < flank.length; i++) {
+      var x = tx + flank[i][0], y = ty + flank[i][1];
       if (inB(x, y) && blocksSight(s, x, y)) return 12;
     }
     return 0;
   }
   function hitChance(s, w, fx, fy, tx, ty) {
-    var d = dist(fx, fy, tx, ty);
+    var d = cheb(fx, fy, tx, ty);
     var pct = w.acc - Math.max(0, d - 1) * (w.falloff || 0) - coverPen(s, fx, fy, tx, ty);
     return Math.max(40, Math.min(100, Math.round(pct)));
   }
@@ -429,8 +448,8 @@
   }
   function interactables(s, u) {
     var out = [];
-    for (var i = 0; i < 4; i++) {
-      var x = u.x + DIRS[i][0], y = u.y + DIRS[i][1];
+    for (var i = 0; i < AIM.length; i++) {                 // diagonals count as beside
+      var x = u.x + AIM[i][0], y = u.y + AIM[i][1];
       if (!inB(x, y)) continue;
       var t = at(s, x, y);
       if (t.t === 'console' && !t.spent) out.push({ x: x, y: y, kind: 'console' });
@@ -481,8 +500,8 @@
       var opts = [];
       for (j = 0; e.atk.range > 0 && j < keys.length; j++) {   // sappers never shoot
         var c = rm[keys[j]], canHit = false;
-        for (var d = 0; d < 4; d++) {
-          var ln = lineScan(s, c.x, c.y, DIRS[d][0], DIRS[d][1], e.atk.range, false);
+        for (var d = 0; d < AIM.length; d++) {
+          var ln = lineScan(s, c.x, c.y, AIM[d][0], AIM[d][1], e.atk.range, false);
           if (ln.hits.length && ln.hits[0].id === tgt.id) { canHit = true; break; }
         }
         if (canHit) opts.push(c);
@@ -510,10 +529,10 @@
         if (!bestK || kk < bestK) { bestK = kk; bestC = cc; }
       }
       if (bestC && (bestC.x !== e.x || bestC.y !== e.y)) {
-        var arms = e.typeId === 'bomber' && dist(bestC.x, bestC.y, tgt.x, tgt.y) === 1;
+        var arms = e.typeId === 'bomber' && cheb(bestC.x, bestC.y, tgt.x, tgt.y) === 1;
         e.intent = { kind: 'move', path: pathFrom(rm, bestC.x, bestC.y), dest: { x: bestC.x, y: bestC.y }, arms: arms };
       } else {
-        e.intent = { kind: 'idle', path: [], arms: e.typeId === 'bomber' && dist(e.x, e.y, tgt.x, tgt.y) === 1 };
+        e.intent = { kind: 'idle', path: [], arms: e.typeId === 'bomber' && cheb(e.x, e.y, tgt.x, tgt.y) === 1 };
       }
     }
   }
@@ -564,8 +583,8 @@
         // telegraph used — predictable rather than arbitrary.
         if (!tgt || tgt.hp <= 0) tgt = pickTarget(s, e);
         if (tgt && tgt.hp > 0) {
-          for (var d = 0; d < 4; d++) {
-            var ln = lineScan(s, e.x, e.y, DIRS[d][0], DIRS[d][1], e.atk.range, false);
+          for (var d = 0; d < AIM.length; d++) {
+            var ln = lineScan(s, e.x, e.y, AIM[d][0], AIM[d][1], e.atk.range, false);
             if (ln.hits.length && ln.hits[0].id === tgt.id) {
               fire(s, e, e.atk, { kind: 'unit', x: tgt.x, y: tgt.y, hits: [tgt] }, dice, fxq);
               if (e.atk.disable && tgt.hp > 0) { tgt.disabled = 1; note(fxq, { kind: 'hack', x: tgt.x, y: tgt.y }); }
@@ -654,7 +673,7 @@
       if (def.cost > budget + 1) continue;
       x = Math.floor(rng() * W); y = Math.floor(rng() * Math.max(2, Math.min(4, H - 3)));
       if (!inB(x, y) || blocksMove(s, x, y) || unitAt(s, x, y)) continue;
-      var tooClose = alive(s, 'player').some(function (o) { return dist(o.x, o.y, x, y) <= 2; });
+      var tooClose = alive(s, 'player').some(function (o) { return cheb(o.x, o.y, x, y) <= 2; });
       if (tooClose) continue;
       s.units.push({
         id: uid('e'), side: 'enemy', typeId: def.id, x: x, y: y, hp: def.hp, maxHp: def.hp,
@@ -702,9 +721,9 @@
     var lever = false;
     for (i = 0; i < enemies.length && !lever; i++) {
       var e = enemies[i];
-      for (var d3 = 0; d3 < 4 && !lever; d3++) {
-        var px2 = e.x + DIRS[d3][0], py2 = e.y + DIRS[d3][1];        // where the pit goes
-        var bx = e.x - DIRS[d3][0], by = e.y - DIRS[d3][1];          // where the shooter stands
+      for (var d3 = 0; d3 < AIM.length && !lever; d3++) {
+        var px2 = e.x + AIM[d3][0], py2 = e.y + AIM[d3][1];          // where the pit goes
+        var bx = e.x - AIM[d3][0], by = e.y - AIM[d3][1];            // where the shooter stands
         if (!inB(px2, py2) || !inB(bx, by)) continue;
         if (unitAt(s, px2, py2) || unitAt(s, bx, by)) continue;
         if (at(s, px2, py2).t === 'wall' || at(s, px2, py2).t === 'floor' || at(s, px2, py2).t === 'pit') {
@@ -828,7 +847,7 @@
       if (s.grenades > 0) {
         for (var g = 0; g < gCand.length; g++) {
           var gt = gCand[g];
-          if (dist(c.x, c.y, gt.x, gt.y) > GRENADE.range) continue;
+          if (cheb(c.x, c.y, gt.x, gt.y) > GRENADE.range) continue;
           var cells = plus(gt.x, gt.y), gs = base - 8, hitAny = false;
           for (var q = 0; q < cells.length; q++) {
             var v = unitAt(s, cells[q].x, cells[q].y);
@@ -938,9 +957,13 @@
   // ============================================================
   // 9. RENDER — everything is drawn from state, every time.
   // ============================================================
-  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp;
+  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp, elFoes;
 
   function neon(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur || 0; }
+  // Canvas type. Heavy grotesque for labels, mono for figures — bigger than
+  // it used to be, because everything here is meant to be read at a glance.
+  function fontHeavy(mult) { ctx.font = Math.round(G.tile * mult) + 'px "Archivo Black","Arial Black",sans-serif'; }
+  function fontData(mult) { ctx.font = '700 ' + Math.round(G.tile * mult) + 'px "IBM Plex Mono",monospace'; }
   function noNeon() { ctx.shadowBlur = 0; }
   function cx(x) { return x * G.tile + G.tile / 2; }
   function cy(y) { return y * G.tile + G.tile / 2; }
@@ -979,8 +1002,8 @@
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(px + 3, py + 3, T - 6, T - 6);
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(255,45,149,.18)';
-      ctx.font = Math.round(T * .34) + 'px "VT323", monospace';
+      ctx.fillStyle = 'rgba(255,45,149,.34)';
+      fontHeavy(.20);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('VOID', cx(x), cy(y));
     } else if (t.t === 'water') {
@@ -1005,7 +1028,7 @@
       ctx.strokeStyle = C.barrel; ctx.lineWidth = 2; ctx.stroke();
       noNeon();
       ctx.fillStyle = C.barrel;
-      ctx.font = 'bold ' + Math.round(T * .3) + 'px "VT323", monospace';
+      fontHeavy(.34);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('!', cx(x), cy(y) + 1);
     } else if (t.t === 'console') {
@@ -1018,7 +1041,7 @@
       noNeon();
       if (!t.spent) {
         ctx.fillStyle = col;
-        ctx.font = Math.round(T * .26) + 'px "VT323", monospace';
+        fontData(.26);
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('///', cx(x), cy(y));
       }
@@ -1077,10 +1100,10 @@
 
     if (G.ui.mode === 'GRENADE') {
       for (var gy = 0; gy < H; gy++) for (var gx = 0; gx < W; gx++) {
-        if (dist(u.x, u.y, gx, gy) <= GRENADE.range) fillCell(gx, gy, 'rgba(255,207,63,.10)');
+        if (cheb(u.x, u.y, gx, gy) <= GRENADE.range) fillCell(gx, gy, 'rgba(255,207,63,.10)');
       }
       var hv = G.ui.hover;
-      if (hv && dist(u.x, u.y, hv.x, hv.y) <= GRENADE.range) {
+      if (hv && cheb(u.x, u.y, hv.x, hv.y) <= GRENADE.range) {
         var cells = plus(hv.x, hv.y);
         for (k = 0; k < cells.length; k++) { fillCell(cells[k].x, cells[k].y, 'rgba(255,207,63,.3)'); ringCell(cells[k].x, cells[k].y, C.warn, 2); }
       }
@@ -1093,19 +1116,19 @@
       for (k = 0; k < keys.length; k++) {
         var c2 = rm[keys[k]];
         if (c2.x === u.x && c2.y === u.y) continue;
-        fillCell(c2.x, c2.y, 'rgba(0,229,255,.10)');
-        ringCell(c2.x, c2.y, 'rgba(0,229,255,.22)', 1);
+        fillCell(c2.x, c2.y, 'rgba(0,229,255,.13)');
+        ringCell(c2.x, c2.y, 'rgba(0,229,255,.38)', 2);
       }
     }
     // firing lanes + targets
     if (!u.hasActed && !u.disabled) {
       var w = WEAPONS[u.weaponId];
-      for (var d = 0; d < 4; d++) {
+      for (var d = 0; d < AIM.length; d++) {
         for (var i2 = 1; i2 <= w.range; i2++) {
-          var lx = u.x + DIRS[d][0] * i2, ly = u.y + DIRS[d][1] * i2;
+          var lx = u.x + AIM[d][0] * i2, ly = u.y + AIM[d][1] * i2;
           if (!inB(lx, ly)) break;
           var stop = at(G, lx, ly).t === 'barrel' || blocksSight(G, lx, ly);
-          fillCell(lx, ly, 'rgba(255,45,149,.07)');
+          fillCell(lx, ly, 'rgba(255,45,149,.09)');
           var uu = unitAt(G, lx, ly);
           if (stop) break;
           if (uu && !w.pierce) break;
@@ -1166,14 +1189,14 @@
   // small odds badge under a target
   function odds(x, y, text, color) {
     var T = G.tile, py = y * T + T - 2;
-    ctx.font = 'bold ' + Math.round(T * .24) + 'px "IBM Plex Mono", monospace';
+    fontData(.30);
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    var w = ctx.measureText(text).width + 6;
+    var w = ctx.measureText(text).width + 10, bh = T * .28;
     var px = clampX(cx(x), w);
-    ctx.fillStyle = 'rgba(8,6,15,.85)';
-    ctx.fillRect(px - w / 2, py - T * .22, w, T * .22);
-    ctx.fillStyle = color;
-    ctx.fillText(text, px, py);
+    ctx.fillStyle = color;                       // solid tag, dark text: reads instantly
+    ctx.fillRect(px - w / 2, py - bh, w, bh);
+    ctx.fillStyle = C.ink;
+    ctx.fillText(text, px, py - bh * .16);
   }
 
   // The action the player has armed with their first click. Shows the outcome
@@ -1235,10 +1258,13 @@
         ctx.setLineDash([]);
         ringCell(kx, ky, col, 2);
         if (fatal) {
-          ctx.fillStyle = col;
-          ctx.font = Math.round(T * .3) + 'px "VT323", monospace';
+          fontHeavy(.20);
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(pv.kbKill.result === 'void' ? 'GONE' : 'BOOM', cx(kx), cy(ky));
+          var kw = ctx.measureText('GONE').width + 10;
+          ctx.fillStyle = col;
+          ctx.fillRect(cx(kx) - kw / 2, cy(ky) - T * .14, kw, T * .28);
+          ctx.fillStyle = C.ink;
+          ctx.fillText(pv.kbKill.result === 'void' ? 'GONE' : 'BOOM', cx(kx), cy(ky) + 1);
         }
       }
       confirmBadge(p.x, p.y, C.mint);
@@ -1299,15 +1325,15 @@
         noNeon();
         reticle(it.tx, it.ty, C.enemy);
         // boxed, so it stays readable over whatever is beneath it
-        ctx.font = 'bold ' + Math.round(T * .23) + 'px "IBM Plex Mono", monospace';
+        fontData(.28);
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        var lbl = (it.pct >= 100 ? 'SURE' : it.pct + '%') + ' · ' + it.dmg;
-        var lw = ctx.measureText(lbl).width + 7;
+        var lbl = (it.pct >= 100 ? 'SURE' : it.pct + '%') + '\u2009' + it.dmg;
+        var lw = ctx.measureText(lbl).width + 10, lh = T * .28;
         var lx = clampX(cx(it.tx), lw);
-        ctx.fillStyle = 'rgba(8,6,15,.88)';
-        ctx.fillRect(lx - lw / 2, it.ty * T - T * .26, lw, T * .25);
         ctx.fillStyle = C.enemy;
-        ctx.fillText(lbl, lx, it.ty * T - 2);
+        ctx.fillRect(lx - lw / 2, it.ty * T - lh, lw, lh);
+        ctx.fillStyle = C.ink;
+        ctx.fillText(lbl, lx, it.ty * T - lh * .16);
       }
       if (it.kind === 'detonate') {
         var cells = it.cells;
@@ -1408,22 +1434,22 @@
     }
     if (u.stunned) {
       ctx.fillStyle = C.warn;
-      ctx.font = Math.round(T * .34) + 'px "VT323", monospace';
+      fontHeavy(.24);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('✦', px + r, py - r);
+      ctx.fillText('\u2716', px + r, py - r);
     }
     if (u.disabled) {
       ctx.fillStyle = C.enemy;
-      ctx.font = Math.round(T * .28) + 'px "VT323", monospace';
+      fontData(.20);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('NO ACT', px, py + r * 1.5);
+      ctx.fillText('HACKED', px, py + r * 1.6);
     }
     // callsign initial, so you can tell your operatives apart at a glance
     if (u.side === 'player') {
       ctx.fillStyle = C.ally;
-      ctx.font = 'bold ' + Math.round(T * .24) + 'px "IBM Plex Mono", monospace';
+      fontHeavy(.30);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText((u.name || '?').charAt(0), px, py + r * .1);
+      ctx.fillText((u.name || '?').charAt(0), px, py + r * .12);
     }
     ctx.globalAlpha = 1;
     hpPips(u);
@@ -1450,7 +1476,7 @@
       var f = G.fx[i], pr = f.t / f.dur;
       ctx.globalAlpha = Math.max(0, 1 - pr);
       ctx.fillStyle = f.color;
-      ctx.font = Math.round(T * (f.big ? .42 : .32)) + 'px "VT323", monospace';
+      fontHeavy(f.big ? .30 : .24);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(f.text, cx(f.x), cy(f.y) - pr * T * .7);
       ctx.globalAlpha = 1;
@@ -1665,8 +1691,10 @@
     if (sig === hudSig) return;
     hudSig = sig;
 
-    elSector.textContent = 'SECTOR ' + String(G.level).padStart(2, '0');
-    elTurn.textContent = 'TURN ' + G.turn + ' · ' + alive(G, 'enemy').length + ' HOSTILE' + (alive(G, 'enemy').length === 1 ? '' : 'S');
+    var foes = alive(G, 'enemy').length;
+    elSector.textContent = String(G.level).padStart(2, '0');
+    elTurn.textContent = String(G.turn);
+    if (elFoes) elFoes.textContent = String(foes);
 
     elSquad.innerHTML = '';
     G.squad.forEach(function (m) {
@@ -1678,11 +1706,13 @@
       if (u) for (var i = 0; i < u.maxHp; i++) pips += '<i class="chip__pip' + (i < u.hp ? '' : ' chip__pip--empty') + '"></i>';
       var canMove = u && u.hp > 0 && !u.hasMoved && !u.disabled;
       var canAct = u && u.hp > 0 && !u.hasActed && !u.disabled;
-      var perks = (m.perks && m.perks.length) ? '<span class="chip__perk" title="' + m.perks.join(', ') + '">★' + m.perks.length + '</span>' : '';
-      b.innerHTML = '<span class="chip__name">' + m.name + '</span>' +
+      var perks = (m.perks && m.perks.length) ? '<span class="chip__perk" title="' + m.perks.join(', ') + '">▲' + m.perks.length + '</span>' : '';
+      b.innerHTML =
+        '<span class="chip__id"><span class="chip__name">' + m.name + '</span>' +
+        '<span class="chip__wpn">' + w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + '</span></span>' +
         '<span class="chip__hp">' + pips + '</span>' +
-        '<span class="chip__av av"><i class="' + (canMove ? 'on' : '') + '"></i><i class="act ' + (canAct ? 'on' : '') + '"></i></span>' +
-        '<span class="chip__wpn">' + w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + '</span>' + perks;
+        '<span class="av"><i class="' + (canMove ? 'on' : '') + '"></i><i class="act ' + (canAct ? 'on' : '') + '"></i></span>' +
+        perks;
       b.title = m.name + ' — ' + w.name + ': range ' + w.range + ', ' + w.dmgMin + '–' + w.dmgMax + ' damage, ' +
         (w.acc >= 100 ? 'never misses' : w.acc + '% point blank') + (w.kb ? ', shoves ' + w.kb : '') +
         (m.perks && m.perks.length ? '\nUpgrades: ' + m.perks.join(', ') : '');
@@ -1696,7 +1726,7 @@
       var g = document.createElement('button');
       g.type = 'button';
       g.className = 'btn-act' + (G.ui.mode === 'GRENADE' ? ' btn-act--on' : '');
-      g.textContent = (G.ui.mode === 'GRENADE' ? 'Cancel frag' : 'Frag ×' + G.grenades);
+      g.textContent = (G.ui.mode === 'GRENADE' ? 'Cancel' : 'Frag ' + G.grenades);
       g.addEventListener('click', function () {
         G.ui.mode = G.ui.mode === 'GRENADE' ? 'SELECT' : 'GRENADE';
         G.ui.path = null; G.ui.pending = null;
@@ -1710,12 +1740,12 @@
     if (G.phase === 'PLAYER') {
       var ops = alive(G, 'player');
       var pend = ops.filter(function (o) { return !done(o) && !o.disabled; }).length;
-      elEnd.textContent = pend ? 'End turn' : 'End turn ✓';
+      elEnd.textContent = pend ? 'End turn' : 'End turn \u25B6';
       elEnd.classList.toggle('btn-end--ready', !pend);
       if (!G.ui.pending) {
         msg(pend
-          ? pend + ' of ' + ops.length + ' still have something left'
-          : 'Everyone is spent — end the turn.');
+          ? pend + ' of ' + ops.length + ' operatives still have orders left'
+          : 'All orders spent. End the turn.');
       }
     }
   }
@@ -1738,7 +1768,7 @@
     var i;
     if (G.ui.mode === 'GRENADE') {
       if (sel.hasActed || G.grenades <= 0) return null;
-      if (dist(sel.x, sel.y, t.x, t.y) > GRENADE.range) return null;
+      if (cheb(sel.x, sel.y, t.x, t.y) > GRENADE.range) return null;
       return { kind: 'grenade', key: 'g:' + t.x + ',' + t.y, x: t.x, y: t.y };
     }
     if (!sel.hasActed) {
@@ -1781,53 +1811,60 @@
     return (m && m.perks && m.perks.length) ? m.perks : null;
   }
 
-  // Structured description of a tile, rendered into the inspector panel.
+  // Structured description of a tile. Grouped into blocks — subject, then the
+  // consequence of clicking — so the panel can be scanned rather than read.
   function describe(t) {
     var sel = selected(), u = unitAt(G, t.x, t.y), tt = at(G, t.x, t.y);
-    var d = { rows: [], warn: [], kind: 'neutral', name: '', sub: '' };
+    var d = { tag: 'Terrain', rows: [], warn: [], kind: 'neutral', name: '', sub: '' };
     var it = sel ? resolveIntent(sel, t) : null;
     var armed = it && G.ui.pending && G.ui.pending.key === it.key;
 
     if (u && u.side === 'enemy') {
       var def = ENEMIES[u.typeId];
-      d.name = def.name; d.kind = 'foe'; d.sub = 'hostile';
-      d.rows.push(['HP', u.hp + ' / ' + u.maxHp]);
-      d.rows.push(['Move', def.move + ' tiles']);
+      d.tag = 'Threat assessment'; d.name = def.name; d.kind = 'foe';
+      d.sub = 'hostile · ' + (def.atk.range === 0 ? 'suicide charge' : def.atk.range === 1 ? 'close quarters' : 'ranged');
+      d.rows.push(['Hull', u.hp + ' / ' + u.maxHp]);
+      d.rows.push(['Move', def.move]);
       d.rows.push(['Its attack', def.atk.range === 0
-        ? 'detonates for ' + def.atk.dmgMax
-        : def.atk.dmgMax + ' dmg · range ' + def.atk.range]);
-      if (def.kbResist) d.rows.push(['Braced', 'shrugs off ' + def.kbResist + ' tile of shove']);
-      if (u.stunned) d.warn.push('Stunned — it skips its next turn.');
-      if (u.armed) d.warn.push('Armed. It detonates on its next turn.');
+        ? 'blast ' + def.atk.dmgMax
+        : def.atk.dmgMax + ' dmg @ ' + def.atk.range]);
+      if (def.kbResist) d.rows.push(['Braced', '−' + def.kbResist + ' shove']);
+      if (u.stunned) d.warn.push('Stunned. Skips its next turn.');
+      if (u.armed) d.warn.push('Armed. Detonates on its next turn.');
       if (u.intent && u.intent.kind === 'attack') {
         var v = byId(G, u.intent.targetId);
-        d.warn.push('Plans to hit ' + (v ? v.name : 'someone') + ' for ' + u.intent.dmg +
+        d.warn.push('Will hit ' + (v ? v.name : 'someone') + ' for ' + u.intent.dmg +
           (u.intent.pct >= 100 ? ' — certain.' : ' at ' + u.intent.pct + '%.'));
       }
     } else if (u && u.side === 'player') {
       var wp = WEAPONS[u.weaponId];
-      d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
-      d.rows.push(['HP', u.hp + ' / ' + u.maxHp + (u.maxHp > BASE_HP ? '  (+' + (u.maxHp - BASE_HP) + ')' : '')]);
-      d.rows.push(['Move', u.move + ' tiles' + (u.move > BASE_MOVE ? '  (+' + (u.move - BASE_MOVE) + ')' : '')]);
-      d.rows.push(['Range', wp.range + (wp.range === 1 ? ' tile (adjacent)' : ' tiles')]);
+      d.tag = 'Operative'; d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
+      d.bigs = [
+        { v: u.hp + '/' + u.maxHp, label: 'hull', cls: '' },
+        { v: String(u.move), label: 'move', cls: '' },
+        { v: 'R' + wp.range, label: 'reach', cls: '' }
+      ];
       d.rows.push(['Damage', wp.dmgMin + '–' + wp.dmgMax]);
-      d.rows.push(['Accuracy', wp.acc >= 100 ? 'never misses' : wp.acc + '% point blank' + (wp.falloff ? ', −' + wp.falloff + '%/tile' : '')]);
+      d.rows.push(['Accuracy', wp.acc >= 100 ? 'never misses'
+        : wp.acc + '%' + (wp.falloff ? ' −' + wp.falloff + '/tile' : '')]);
       if (wp.kb) d.rows.push(['Shove', wp.kb + (wp.kb === 1 ? ' tile' : ' tiles')]);
-      if (wp.pierce) d.rows.push(['Pierce', 'hits the whole lane']);
+      if (wp.pierce) d.rows.push(['Pierce', 'whole lane']);
+      if (u.maxHp > BASE_HP) d.rows.push(['Plating', '+' + (u.maxHp - BASE_HP) + ' hull']);
+      if (u.move > BASE_MOVE) d.rows.push(['Servos', '+' + (u.move - BASE_MOVE) + ' move']);
       d.avail = { move: !u.hasMoved && !u.disabled, act: !u.hasActed && !u.disabled };
       d.note = wp.blurb;
       d.perks = perkList(u);
-      if (u.disabled) d.warn.push('Hacked — cannot act this turn.');
+      if (u.disabled) d.warn.push('Hacked. Cannot act this turn.');
       var th = threatened(u.x, u.y);
-      if (th) d.warn.push('Standing in ' + ENEMIES[th.typeId].name + '’s line of fire.');
+      if (th) d.warn.push('In ' + ENEMIES[th.typeId].name + '’s firing line.');
     } else {
       var TERRAIN = {
-        pit: ['Void', 'Anything shoved in here is gone. No dice.'],
-        barrel: ['Fuel barrel', 'Shoot it, or shove something into it. ' + BLAST_DMG + ' damage to five tiles, and it chains.'],
-        water: ['Coolant', 'Harmless until a console or shock prod electrifies it — then ' + SHOCK_DMG + ' damage to everything standing in it.'],
-        console: ['Console', tt.spent ? 'Burned out.' : 'Stand beside it and use it to electrify every coolant pool at once.'],
-        door: ['Blast door', tt.open ? 'Open. Stand beside it to seal it and cut a lane.' : 'Sealed. Stand beside it to open it.'],
-        wall: ['Bulkhead', 'Blocks movement and line of fire. Hugging one side-on gives cover.'],
+        pit: ['Void', 'Anything shoved in falls out of the world. No dice involved.'],
+        barrel: ['Fuel barrel', 'Shoot it or shove something into it. ' + BLAST_DMG + ' damage in a cross, and it chains.'],
+        water: ['Coolant', 'Harmless until something electrifies it — then ' + SHOCK_DMG + ' damage to everything standing in it.'],
+        console: ['Console', tt.spent ? 'Burned out.' : 'Stand beside it to electrify every coolant pool at once.'],
+        door: ['Blast door', tt.open ? 'Open. Stand beside it to seal the lane.' : 'Sealed. Stand beside it to open it.'],
+        wall: ['Bulkhead', 'Stops movement and gunfire. Standing against one gives cover.'],
         floor: ['Deck', '']
       };
       var info = TERRAIN[tt.t] || TERRAIN.floor;
@@ -1835,86 +1872,115 @@
       d.note = info[1];
     }
 
-    // ---- what the click would do ----
+    // ---- the consequence of clicking, as its own block ----
     if (it && sel) {
+      var a = { tag: 'Order', rows: [], bigs: [], warn: [] };
       if (it.kind === 'shot') {
         var pv = previewShot(sel, it.w, it.shot);
-        d.rows.push(['—', '']);
+        a.tag = 'Firing solution';
         if (pv.barrel) {
-          d.rows.push(['Shot', it.w.name + ' → barrel']);
-          d.rows.push(['To hit', 'always']);
-          d.rows.push(['Blast', BLAST_DMG + ' dmg to ' + pv.blast + ' unit' + (pv.blast === 1 ? '' : 's')]);
+          a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+                    { v: String(BLAST_DMG), label: 'blast', cls: 'big--dmg' }];
+          a.rows.push(['Weapon', it.w.name]);
+          a.rows.push(['Caught', pv.blast + ' unit' + (pv.blast === 1 ? '' : 's')]);
         } else {
-          d.rows.push(['Shot', it.w.name]);
-          d.rows.push(['To hit', pv.sure ? 'certain' : pv.pct + '%']);
-          d.rows.push(['Damage', it.w.dmgMin + '–' + it.w.dmgMax]);
+          a.bigs = [{ v: pv.sure ? 'SURE' : pv.pct + '%', label: 'to hit', cls: pv.sure ? 'big--sure' : 'big--hit' },
+                    { v: it.w.dmgMin + '–' + it.w.dmgMax, label: 'damage', cls: 'big--dmg' }];
+          a.rows.push(['Weapon', it.w.name]);
+          a.rows.push(['Range', cheb(sel.x, sel.y, it.x, it.y) + ' of ' + it.w.range]);
           if (pv.kbKill) {
             var r = pv.kbKill.result;
-            d.rows.push(['Shove', r === 'void' ? 'into the void'
+            a.rows.push(['Shove', r === 'void' ? 'into the void'
               : r === 'barrel' ? 'into a barrel'
-              : r === 'wall' ? 'into a wall (+' + BONK_DMG + ')'
-              : r === 'unit' ? 'into another unit (+' + BONK_DMG + ' each)'
+              : r === 'wall' ? 'into a wall +' + BONK_DMG
+              : r === 'unit' ? 'into a unit +' + BONK_DMG
               : pv.kbKill.tiles + ' tile' + (pv.kbKill.tiles === 1 ? '' : 's')]);
           }
-          if (pv.allies) d.warn.push('This lane also hits ' + pv.allies + ' of your own.');
+          if (pv.allies) a.warn.push('This lane also hits ' + pv.allies + ' of your own.');
         }
-        d.kill = sureKill(pv);
-        d.confirm = { text: armed ? 'Click again to fire' : 'Click to aim', danger: !!pv.allies };
+        a.kill = sureKill(pv);
+        d.confirm = { text: armed ? 'Click again to fire' : 'Click to aim', state: armed ? (pv.allies ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'grenade') {
-        d.name = 'Frag grenade'; d.kind = 'neutral'; d.sub = G.grenades + ' left';
-        d.rows = [['To hit', 'always'], ['Damage', GRENADE.dmgMin + '–' + GRENADE.dmgMax], ['Area', 'this tile + 4 around it'], ['Shove', '1 tile outward']];
+        a.tag = 'Frag';
+        a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+                  { v: GRENADE.dmgMin + '–' + GRENADE.dmgMax, label: 'damage', cls: 'big--dmg' }];
         var caught = plus(it.x, it.y).map(function (c) { return unitAt(G, c.x, c.y); }).filter(Boolean);
-        var mine = caught.filter(function (v) { return v.side === 'player'; }).length;
-        d.rows.push(['Caught', caught.length + ' unit' + (caught.length === 1 ? '' : 's')]);
-        if (mine) d.warn.push('Would also catch ' + mine + ' of your own.');
-        d.confirm = { text: armed ? 'Click again to throw' : 'Click to aim the frag', danger: !!mine };
+        var mine = caught.filter(function (v2) { return v2.side === 'player'; }).length;
+        a.rows.push(['Area', 'cross, 5 tiles']);
+        a.rows.push(['Caught', caught.length + ' unit' + (caught.length === 1 ? '' : 's')]);
+        a.rows.push(['Left', String(G.grenades)]);
+        if (mine) a.warn.push('Would also catch ' + mine + ' of your own.');
+        d.confirm = { text: armed ? 'Click again to throw' : 'Click to aim', state: armed ? (mine ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'interact') {
-        d.confirm = { text: armed ? 'Click again to use it' : 'Click to use it', danger: false };
+        a.tag = it.ikind === 'console' ? 'Console' : 'Blast door';
+        a.rows.push(['Effect', it.ikind === 'console' ? 'electrify all coolant' : (at(G, it.x, it.y).open ? 'seal it' : 'open it')]);
+        d.confirm = { text: armed ? 'Click again to use' : 'Click to use', state: armed ? 'ready' : 'wait' };
       } else if (it.kind === 'move') {
-        d.rows.push(['—', '']);
-        d.rows.push(['Move here', it.steps + ' of ' + sel.move + ' tiles']);
+        a.tag = 'Move order';
+        a.bigs = [{ v: String(it.steps), label: 'tiles', cls: '' },
+                  { v: String(sel.move - it.steps), label: 'spare', cls: '' }];
         var thr = threatened(it.x, it.y);
-        if (thr) d.warn.push('That tile is in ' + ENEMIES[thr.typeId].name + '’s planned attack.');
-        if (at(G, it.x, it.y).t === 'water') d.warn.push('Coolant — risky if anything electrifies it.');
-        d.confirm = { text: armed ? 'Click again to move' : 'Click to plan the move', danger: !!thr };
+        if (thr) a.warn.push('That tile is inside ' + ENEMIES[thr.typeId].name + '’s planned attack.');
+        if (at(G, it.x, it.y).t === 'water') a.warn.push('Coolant. Risky if anything electrifies it.');
+        d.confirm = { text: armed ? 'Click again to move' : 'Click to plan', state: armed ? (thr ? 'danger' : 'ready') : 'wait' };
       }
+      d.action = a;
     } else if (sel && u === sel) {
-      d.confirm = { text: 'Click a tile to move, a hostile to shoot', danger: false };
+      d.confirm = { text: 'Pick a tile or a hostile', state: 'wait' };
     }
     return d;
+  }
+
+  function led(k, v) {
+    return '<div class="led"><span class="led__k">' + k + '</span>' +
+      '<span class="led__fill"></span><span class="led__v">' + v + '</span></div>';
+  }
+  function bigs(list) {
+    return '<div class="tip__bigs">' + list.map(function (b) {
+      return '<span class="big ' + (b.cls || '') + '"><b>' + b.v + '</b><i>' + b.label + '</i></span>';
+    }).join('') + '</div>';
   }
 
   function renderTip(t) {
     if (!t || G.phase !== 'PLAYER') { elTip.hidden = true; return; }
     var d = describe(t);
-    // nothing worth a panel (an empty stretch of deck)
     if (!d.rows.length && !d.confirm && !d.note && !d.warn.length) { elTip.hidden = true; return; }
 
-    var h = '<div class="tip__head"><span class="tip__name tip__name--' +
-      (d.kind === 'foe' ? 'foe' : d.kind === 'ally' ? 'ally' : 'neutral') + '">' + d.name + '</span>';
+    var tabCls = d.kind === 'foe' ? 'tab--foe' : d.kind === 'ally' ? 'tab--ally' : '';
+    var h = '<div class="tip__head"><span class="tab ' + tabCls + '">' + d.tag + '</span>' +
+      '<span class="tip__name tip__name--' + d.kind + '">' + d.name.toUpperCase() + '</span>';
     if (d.sub) h += '<span class="tip__sub">' + d.sub + '</span>';
     h += '</div>';
 
-    if (d.avail) {
-      h += '<dl class="tip__stats"><div class="tip__row"><dt>Left this turn</dt><dd>' +
-        '<span class="av"><i class="' + (d.avail.move ? 'on' : '') + '" title="Move"></i>' +
-        '<i class="act ' + (d.avail.act ? 'on' : '') + '" title="Action"></i></span> ' +
-        (d.avail.move && d.avail.act ? 'move + action' : d.avail.move ? 'move only' : d.avail.act ? 'action only' : 'nothing') +
-        '</dd></div></dl>';
+    // subject block
+    if (d.bigs || d.rows.length || d.avail || d.note || d.warn.length || d.perks) {
+      h += '<div class="tip__block">';
+      if (d.bigs) h += bigs(d.bigs);
+      if (d.avail) {
+        h += led('Unspent', '<span class="av"><i class="' + (d.avail.move ? 'on' : '') + '"></i>' +
+          '<i class="act ' + (d.avail.act ? 'on' : '') + '"></i></span> ' +
+          (d.avail.move && d.avail.act ? 'move + action' : d.avail.move ? 'move' : d.avail.act ? 'action' : 'none'));
+      }
+      d.rows.forEach(function (r) { h += led(r[0], r[1]); });
+      if (d.perks) h += '<p class="tip__perks">▲ ' + d.perks.join(' · ') + '</p>';
+      if (d.note) h += '<p class="tip__note">' + d.note + '</p>';
+      d.warn.forEach(function (w) { h += '<p class="tip__warn">' + w + '</p>'; });
+      h += '</div>';
     }
-    if (d.rows.length) {
-      h += '<dl class="tip__stats">';
-      d.rows.forEach(function (r) {
-        if (r[0] === '—') { h += '<div class="tip__row" style="height:.35rem"></div>'; return; }
-        h += '<div class="tip__row"><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>';
-      });
-      h += '</dl>';
+
+    // order block
+    if (d.action) {
+      h += '<div class="tip__block"><span class="tab tab--mint">' + d.action.tag + '</span>';
+      if (d.action.bigs.length) h += bigs(d.action.bigs);
+      d.action.rows.forEach(function (r) { h += led(r[0], r[1]); });
+      if (d.action.kill) h += '<p class="tip__kill">▮ ' + d.action.kill + '</p>';
+      d.action.warn.forEach(function (w) { h += '<p class="tip__warn">' + w + '</p>'; });
+      h += '</div>';
     }
-    if (d.kill) h += '<p class="tip__kill">' + d.kill + '</p>';
-    if (d.note) h += '<p class="tip__note">' + d.note + '</p>';
-    d.warn.forEach(function (w) { h += '<p class="tip__warn">' + w + '</p>'; });
-    if (d.perks) h += '<p class="tip__perks">Upgrades: ' + d.perks.join(', ') + '</p>';
-    if (d.confirm) h += '<div class="tip__confirm' + (d.confirm.danger ? ' tip__confirm--danger' : '') + '">' + d.confirm.text + '</div>';
+
+    if (d.confirm) {
+      h += '<div class="tip__confirm tip__confirm--' + d.confirm.state + '">' + d.confirm.text + '</div>';
+    }
 
     elTip.innerHTML = h;
     elTip.hidden = false;
@@ -2088,19 +2154,23 @@
   }
   function hidePanel() { elOverlay.hidden = true; }
 
-  var RULES =
-    '<div class="how">' +
-    '<p><b>Click an operative</b> to select them. Each gets <b>one move and one action</b> per turn — the two markers under the token, and on their card at the bottom, show what they have left.</p>' +
-    '<p><b>Clicking is two-stage.</b> The first click shows the numbers: to-hit, damage, and exactly where a shove would put them. The second click on the same tile commits. Right-click, or click the operative again, to cancel.</p>' +
-    '<p><b>Every hostile shows its plan</b> — the dashed line is where it walks, the reticle is who it hits, and the number is its odds against you.</p>' +
-    '<p><span>Guns roll to hit. The room never does.</span> Shoving something into the void kills it outright. Barrels, frags and the shock prod are certainties too — that is how you beat a bad streak.</p>' +
-    '<p>Clear the sector, take an upgrade, drop into a harder one. Every sector is generated and checked to be winnable.</p>' +
+  function rule(n, html) {
+    return '<div class="how__row"><span class="how__n">' + n + '</span><p class="how__t">' + html + '</p></div>';
+  }
+  var RULES = '<div class="how">' +
+    rule(1, '<b>One move and one action</b> per operative, per turn. The square and circle under each token are what is still unspent.') +
+    rule(2, '<b>Clicking is two-stage.</b> The first click shows you the numbers. The second click on the same tile commits it. Right-click to cancel.') +
+    rule(3, '<b>Guns fire in eight directions</b>, diagonals included, out to their range. Bulkheads stop a shot, and nothing squeezes through a corner gap.') +
+    rule(4, '<b>Every hostile shows its plan.</b> The dashed line is where it walks; the tag on your operative is what it will do, and its odds.') +
+    rule(5, '<s>Guns roll to hit. The room never does.</s> Shove something into the void and it is gone. Barrels, frags and the shock prod are certainties too — that is how you beat a cold streak.') +
+    rule(6, 'Clear the sector, take one requisition, drop into a harder one. <em>Every sector is generated and then solved before you ever see it.</em>') +
     '</div>';
 
   function titleScreen() {
     showPanel(
-      '<h1>Null Sector</h1>' +
-      '<p class="lede">A turn-based tactics puzzle. Mouse only.</p>' +
+      '<span class="tab tab--foe">Field manual</span>' +
+      '<h1>Null <span>Sector</span></h1>' +
+      '<p class="lede">Turn-based tactics · mouse only</p>' +
       RULES +
       '<button class="btn-neon" data-go>Deploy</button>'
     );
@@ -2111,7 +2181,8 @@
   function helpScreen() {
     if (!elOverlay.hidden || G.phase === 'TITLE') return;
     var back = G.phase;
-    showPanel('<h2>How to play</h2>' + RULES + '<button class="btn-neon" data-back>Back to it</button>');
+    showPanel('<span class="tab tab--amber">Field manual</span><h2>How to play</h2>' + RULES +
+      '<button class="btn-neon" data-back>Back to it</button>');
     G.phase = 'HELP';
     elPanel.querySelector('[data-back]').addEventListener('click', function () {
       hidePanel(); G.phase = back; draw();
@@ -2200,7 +2271,8 @@
     var offer = pool.slice(0, 3);
 
     var lostLine = down.length
-      ? '<p style="color:#ff2d95">' + down.map(function (m) { return m.name; }).join(', ') + ' did not make it.</p>'
+      ? '<p class="tip__warn" style="display:block">' + down.map(function (m) { return m.name; }).join(', ') +
+        ' did not make it out.</p>'
       : '';
     // Current squad, so the upgrades you've taken are visible when you pick more.
     var roster = '<dl class="roster">' + G.squad.map(function (m) {
@@ -2214,9 +2286,11 @@
     }).join('') +
       '<div class="roster__row"><dt>Frags</dt><dd>' + G.grenades + ' in the pack</dd></div></dl>';
 
-    var html = '<h2>Sector ' + String(G.level).padStart(2, '0') + ' clear</h2>' +
+    var html = '<span class="tab tab--mint">Debrief</span>' +
+      '<h2>Sector ' + String(G.level).padStart(2, '0') + ' cleared</h2>' +
       lostLine + roster +
-      '<p>Squad patched up. Take one thing before the next drop.</p><div class="rewards">';
+      '<span class="tab">Requisition</span>' +
+      '<p>Squad patched up. Draw one item before the next drop.</p><div class="rewards">';
     offer.forEach(function (r, k) {
       html += '<button class="reward" type="button" data-r="' + k + '">' +
         '<span class="reward__icon">' + r.icon + '</span>' +
@@ -2253,9 +2327,11 @@
       run_seconds: G.runStart ? Math.round((Date.now() - G.runStart) / 1000) : null
     });
     showPanel(
+      '<span class="tab tab--foe">Contact lost</span>' +
       '<h2>Squad lost</h2>' +
-      '<p>You made it to sector ' + String(G.level).padStart(2, '0') + '.</p>' +
-      '<p class="lede">The room is always the sharpest weapon. Next time, shove something into the void.</p>' +
+      '<p>Furthest sector reached: <b>' + String(G.level).padStart(2, '0') + '</b>.</p>' +
+      '<p class="lede">The room is the sharpest weapon you have</p>' +
+      '<p>Next time, put something in the void. It never misses.</p>' +
       '<button class="btn-neon" data-again>Redeploy</button>'
     );
     say('Squad lost at sector ' + G.level);
@@ -2337,6 +2413,7 @@
     elLive = document.querySelector('[data-live]');
     elTip = document.querySelector('[data-tip]');
     elHelp = document.querySelector('[data-help]');
+    elFoes = document.querySelector('[data-foes]');
 
     G = {
       tiles: blankTiles(), units: [], squad: [], grenades: 0,
