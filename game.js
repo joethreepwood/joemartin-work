@@ -1344,18 +1344,8 @@
       if (!th.count) continue;
       var text = th.voided ? 'VOID' : (th.lethal ? 'KILLS ' : '−') + th.dmg;
       var col = th.lethal ? C.enemy : C.warn;
-      fontData(.30);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      var w = ctx.measureText(text).width + 10, bh = T * .28;
-      var px = clampX(cx(u.rx), w), py = u.ry * T;
-      if (th.lethal) {                        // outline as well as colour
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-        ctx.strokeRect(px - w / 2 - 1, py - bh - 1, w + 2, bh + 2);
-      }
-      ctx.fillStyle = col;
-      ctx.fillRect(px - w / 2, py - bh, w, bh);
-      ctx.fillStyle = C.ink;
-      ctx.fillText(text, px, py - bh * .16);
+      // sits above the operative; badge() clamps it so a top-row token is fine
+      badge(cx(u.rx), u.ry * T, text, col, C.ink, th.lethal);
     }
   }
 
@@ -1381,17 +1371,33 @@
     return Math.max(w / 2 + 1, Math.min(W * G.tile - w / 2 - 1, px));
   }
 
-  // small odds badge under a target
+  // A boxed label that sits just above `bottomY`, tall enough to hold the glyph
+  // without clipping, centred vertically, and never pushed off the top edge.
+  function badge(cxPx, bottomY, text, fillCol, textCol, outline) {
+    var T = G.tile;
+    fontData(.28);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var w = ctx.measureText(text).width + 12, bh = Math.round(T * .38);
+    var px = clampX(cxPx, w);
+    // Keep the box a fixed height and slide it fully onto the canvas — a token in
+    // the top row has no room above it, so the badge drops to overlap its tile
+    // rather than inverting or clipping off the top edge.
+    var top = bottomY - bh;
+    if (top < 1) top = 1;
+    if (top + bh > H * T - 1) top = H * T - 1 - bh;
+    if (outline) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.strokeRect(px - w / 2 - 1, top - 1, w + 2, bh + 2);
+    }
+    ctx.fillStyle = fillCol;
+    ctx.fillRect(px - w / 2, top, w, bh);
+    ctx.fillStyle = textCol;
+    ctx.fillText(text, px, top + bh / 2 + 1);
+  }
+
+  // your to-hit, tucked against the bottom edge of the target tile
   function odds(x, y, text, color) {
-    var T = G.tile, py = y * T + T - 2;
-    fontData(.30);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    var w = ctx.measureText(text).width + 10, bh = T * .28;
-    var px = clampX(cx(x), w);
-    ctx.fillStyle = color;                       // solid tag, dark text: reads instantly
-    ctx.fillRect(px - w / 2, py - bh, w, bh);
-    ctx.fillStyle = C.ink;
-    ctx.fillText(text, px, py - bh * .16);
+    badge(cx(x), y * G.tile + G.tile - 1, text, color, C.ink, false);
   }
 
   // The action the player has armed with their first click. Shows the outcome
@@ -1923,7 +1929,7 @@
       var perks = (m.perks && m.perks.length) ? '<span class="chip__perk" title="' + m.perks.join(', ') + '">▲' + m.perks.length + '</span>' : '';
       b.innerHTML =
         '<span class="chip__id"><span class="chip__name">' + m.name + '</span>' +
-        '<span class="chip__wpn">' + w.name + ' · R' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + '</span></span>' +
+        '<span class="chip__wpn">' + w.name + ' · rng ' + w.range + ' · ' + w.dmgMin + '–' + w.dmgMax + '</span></span>' +
         '<span class="chip__hp">' + pips + '</span>' +
         '<span class="av"><i class="' + (canMove ? 'on' : '') + '"></i><i class="act ' + (canAct ? 'on' : '') + '"></i></span>' +
         perks;
@@ -2078,7 +2084,7 @@
       var def = ENEMIES[u.typeId];
       d.tag = 'Threat assessment'; d.name = def.name; d.kind = 'foe'; d.flavour = def.flavour;
       d.sub = 'hostile · ' + (def.atk.range === 0 ? 'suicide charge' : def.atk.range === 1 ? 'close quarters' : 'ranged');
-      d.rows.push(['Hull', u.hp + ' / ' + u.maxHp]);
+      d.rows.push(['Health', u.hp + ' / ' + u.maxHp]);
       d.rows.push(['Move', def.move]);
       d.rows.push(['Its attack', def.atk.range === 0
         ? 'blast ' + u.atk.dmgMax
@@ -2103,16 +2109,16 @@
       d.tag = 'Operative'; d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
       d.flavour = OP_FLAVOUR[u.name] || 'Contract operative. In it for the pay and the quiet.';
       d.bigs = [
-        { v: u.hp + '/' + u.maxHp, label: 'hull', cls: '' },
+        { v: u.hp + '/' + u.maxHp, label: 'health', cls: '' },
         { v: String(u.move), label: 'move', cls: '' },
-        { v: 'R' + wp.range, label: 'reach', cls: '' }
+        { v: String(wp.range), label: 'range', cls: '' }
       ];
       d.rows.push(['Damage', wp.dmgMin + '–' + wp.dmgMax]);
       d.rows.push(['Accuracy', wp.acc >= 100 ? 'never misses'
         : wp.acc + '%' + (wp.falloff ? ' −' + wp.falloff + '/tile' : '')]);
       if (wp.kb) d.rows.push(['Shove', wp.kb + (wp.kb === 1 ? ' tile' : ' tiles')]);
       if (wp.pierce) d.rows.push(['Pierce', 'whole lane']);
-      if (u.maxHp > BASE_HP) d.rows.push(['Plating', '+' + (u.maxHp - BASE_HP) + ' hull']);
+      if (u.maxHp > BASE_HP) d.rows.push(['Plating', '+' + (u.maxHp - BASE_HP) + ' health']);
       if (u.move > BASE_MOVE) d.rows.push(['Servos', '+' + (u.move - BASE_MOVE) + ' move']);
       d.avail = { move: !u.hasMoved && !u.disabled, act: !u.hasActed && !u.disabled };
       d.note = wp.blurb;
@@ -2273,9 +2279,13 @@
       }).join('') + '</div>';
     }
 
-    // one line of the most urgent text, nothing more
-    var line = (a && a.kill) || (a && a.warn[0]) || d.warn[0] || '';
-    if (line) h += '<p class="sheet__line' + (a && a.kill ? ' sheet__line--kill' : '') + '">' + line + '</p>';
+    // One line, in priority order: a certain kill, then any warning, then the
+    // flavour caption when nothing more urgent needs saying. This is why tapping
+    // a tile for its dossier now shows the flavour on a phone.
+    var urgent = (a && a.kill) || (a && a.warn[0]) || d.warn[0] || '';
+    var line = urgent || d.flavour || '';
+    var lineCls = (a && a.kill) ? ' sheet__line--kill' : (urgent ? '' : ' sheet__line--flavour');
+    if (line) h += '<p class="sheet__line' + lineCls + '">' + line + '</p>';
     if (d.confirm) {
       h += '<div class="tip__confirm tip__confirm--' + d.confirm.state + '">' + d.confirm.text + '</div>';
     }
@@ -2647,12 +2657,12 @@
     },
     // --- defence -------------------------------------------------------
     {
-      id: 'plating', icon: '\u25A3', name: 'Plating', desc: '+2 hull, everyone', weight: 4,
+      id: 'plating', icon: '\u25A3', name: 'Plating', desc: '+2 health, everyone', weight: 4,
       // capped: the hull readout is drawn as pips, and unbounded HP would both
       // overflow the card and flatten the difficulty curve
       ok: function () { return G.squad.every(function (m) { return m.maxHp < 11; }); },
       run: function () { G.squad.forEach(function (m) { m.maxHp += 2; tallyPerk(m, 'Plating'); }); },
-      foe: function () { G.foe.hp += 1; }, took: '+1 hull'
+      foe: function () { G.foe.hp += 1; }, took: '+1 health'
     },
     {
       id: 'plates', icon: '\u2593', name: 'Ablative plates', desc: 'Every hit lands 1 softer', weight: 6,
@@ -2670,7 +2680,7 @@
       id: 'surgeon', icon: '\u271A', name: 'Field surgeon', desc: 'One operative gets back up', weight: 7,
       ok: function () { return (G.mods.revive || 0) < 2; },
       run: function () { G.mods.revive = (G.mods.revive || 0) + 1; },
-      foe: function () { G.foe.hp += 1; }, took: '+1 hull'
+      foe: function () { G.foe.hp += 1; }, took: '+1 health'
     },
     // --- mobility ------------------------------------------------------
     {

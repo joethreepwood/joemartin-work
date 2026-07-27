@@ -281,6 +281,7 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
     font-size:.7rem;line-height:1.3;color:var(--amber);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .sheet__line--kill{color:var(--mint);font-weight:600;}
+  .sheet__line--flavour{color:var(--dim);font-style:italic;}
   .tip__confirm{grid-column:1/-1;grid-row:3;align-self:end;}
   .tip__sheet-hint{grid-column:1/-1;grid-row:1/-1;align-self:center;}
 }
