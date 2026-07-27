@@ -56,8 +56,10 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 /* label ......... value */
 .led{display:flex;align-items:baseline;gap:.4rem;font-size:.8rem;line-height:1.75;}
 .led__k{flex:0 0 auto;color:var(--dim);text-transform:uppercase;letter-spacing:.09em;font-size:.72rem;}
-.led__fill{flex:1 1 auto;border-bottom:1px dotted rgba(156,147,189,.45);transform:translateY(-.22em);}
-.led__v{flex:0 0 auto;color:#fff;font-weight:600;}
+.led__fill{flex:1 1 auto;min-width:.5rem;border-bottom:1px dotted rgba(156,147,189,.45);transform:translateY(-.22em);}
+/* shrinkable and wrappable: a long value used to run straight out of the panel */
+.led__v{flex:0 1 auto;min-width:0;color:#fff;font-weight:600;text-align:right;
+  overflow-wrap:anywhere;}
 .led__v em{font-style:normal;color:var(--mint);}
 .led__v s{text-decoration:none;color:var(--dim);font-weight:400;}
 
@@ -156,22 +158,63 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 }
 
 /* ---------- CRT pass ----------
-   Sits above everything, catches no clicks. Two layers in one element: fine
-   horizontal scanlines, plus a vignette that darkens the corners like a tube.
-   Kept deliberately faint — it should read as "screen", not as a filter. */
+   Above everything, catches no clicks. Scanlines + vignette, a slow bloom, and
+   a sweep bar that rolls down the tube. `.crt--hit` fires for a moment when one
+   of your operatives is hurt: the lines thicken, the picture flashes and the
+   whole thing jitters. That burst is the only loud part, and it is short. */
 .crt{position:absolute;inset:0;z-index:40;pointer-events:none;
   background:
-    repeating-linear-gradient(rgba(0,0,0,0) 0 2px, rgba(0,0,0,.13) 2px 3px),
-    radial-gradient(125% 115% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.42) 100%);
+    repeating-linear-gradient(rgba(0,0,0,0) 0 2px, rgba(0,0,0,.20) 2px 3px),
+    radial-gradient(125% 115% at 50% 50%, rgba(0,0,0,0) 52%, rgba(0,0,0,.55) 100%);
   mix-blend-mode:multiply;}
-/* a very slow brightness drift, so the tube feels alive without distracting */
+/* the roll: a soft bright band easing down the screen */
+.crt::after{content:"";position:absolute;left:0;right:0;height:38%;
+  background:linear-gradient(rgba(255,255,255,0), rgba(190,215,255,.055), rgba(255,255,255,0));
+  mix-blend-mode:screen;}
 @media (prefers-reduced-motion:no-preference){
-  .crt{animation:crtdrift 7s ease-in-out infinite;}
+  .crt{animation:crtbloom 6s ease-in-out infinite;}
+  .crt::after{animation:crtroll 7.5s linear infinite;}
 }
-@keyframes crtdrift{0%,100%{opacity:.9}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){ .crt::after{display:none;} }
+@keyframes crtbloom{0%,100%{opacity:.92}50%{opacity:1}}
+@keyframes crtroll{from{top:-40%}to{top:100%}}
+
+/* interference burst — an operative just took a hit */
+.crt--hit{animation:crtjolt .26s steps(2,end) 1 !important;
+  background:
+    repeating-linear-gradient(rgba(0,0,0,0) 0 1px, rgba(0,0,0,.34) 1px 3px),
+    radial-gradient(125% 115% at 50% 50%, rgba(255,45,149,.16) 0%, rgba(0,0,0,.62) 100%);}
+@keyframes crtjolt{
+  0%  {opacity:1;   transform:translate3d(0,0,0)}
+  25% {opacity:.72; transform:translate3d(-3px,1px,0)}
+  50% {opacity:1;   transform:translate3d(3px,-2px,0)}
+  75% {opacity:.8;  transform:translate3d(-2px,0,0)}
+  100%{opacity:1;   transform:translate3d(0,0,0)}
+}
+/* the flash itself: a single white frame over the board, faded out fast */
+.hitflash{position:absolute;inset:0;z-index:39;pointer-events:none;opacity:0;
+  background:radial-gradient(60% 50% at 50% 50%, rgba(255,255,255,.30), rgba(255,45,149,.10) 60%, rgba(0,0,0,0) 75%);}
+.hitflash--on{animation:flashout .3s ease-out 1;}
+@keyframes flashout{from{opacity:1}to{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .crt--hit{animation:none!important;}
+  .hitflash--on{animation:none;}
+}
 
 /* ---------- board ---------- */
+/* The dead space around the board is a faint drifting hatch, so the dark area
+   reads as a surface the sector sits on rather than an empty void. Very low
+   contrast on purpose — it must never compete with the board. */
 .stagewrap{flex:1 1 auto;min-height:0;display:grid;place-items:center;position:relative;overflow:hidden;}
+.stagewrap::before{content:"";position:absolute;inset:-40%;pointer-events:none;z-index:0;
+  background:
+    repeating-linear-gradient(45deg, rgba(122,92,255,.05) 0 1px, rgba(0,0,0,0) 1px 12px),
+    repeating-linear-gradient(-45deg, rgba(0,229,255,.035) 0 1px, rgba(0,0,0,0) 1px 22px),
+    radial-gradient(70% 60% at 50% 45%, rgba(122,92,255,.07), rgba(0,0,0,0) 70%);
+  animation:drift 26s linear infinite;}
+.stagewrap > *{position:relative;z-index:1;}
+@keyframes drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(34px,34px,0)}}
+@media (prefers-reduced-motion:reduce){ .stagewrap::before{animation:none;} }
 #stage{display:block;cursor:pointer;touch-action:none;}
 
 /* ---------- inspector ("dossier") ---------- */

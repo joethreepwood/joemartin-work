@@ -92,24 +92,39 @@
   // kills. Very little dies to gunfire alone in a turn, so every turn asks
   // "where can I put this thing", not "can I out-damage it".
   var WEAPONS = {
-    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 1, dmgMax: 2, acc: 92,  falloff: 7,  kb: 2,
+    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 1, dmgMax: 2, acc: 58,  falloff: 7,  kb: 2,
                blurb: 'Chips away, but shoves two tiles.' },
-    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 2, dmgMax: 3, acc: 96,  falloff: 14, kb: 3,
+    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 2, dmgMax: 3, acc: 80,  falloff: 14, kb: 3,
                blurb: 'Close range, huge shove. The void does the killing.' },
-    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 1, dmgMax: 2, acc: 88,  falloff: 4,  kb: 1, pierce: true,
+    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 1, dmgMax: 2, acc: 90,  falloff: 4,  kb: 1, pierce: true,
                blurb: 'Crosses the board. Pierces the lane — yours included.' },
     shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 1, acc: 100, falloff: 0,  kb: 2, stun: true, electrify: true,
                blurb: 'Adjacent, never misses. Stuns, shoves, charges coolant.' },
-    carbine: { id: 'carbine', name: 'Carbine',    range: 3, dmgMin: 2, dmgMax: 2, acc: 94,  falloff: 6,  kb: 2,
+    carbine: { id: 'carbine', name: 'Carbine',    range: 3, dmgMin: 2, dmgMax: 2, acc: 70,  falloff: 6,  kb: 2,
                blurb: 'Steadier than the sidearm, shoves as hard.' },
     hammer:  { id: 'hammer',  name: 'Breach Hammer', range: 1, dmgMin: 2, dmgMax: 3, acc: 100, falloff: 0, kb: 4,
                blurb: 'Adjacent, never misses, shoves four tiles. A launcher.' },
-    lance:   { id: 'lance',   name: 'Arc Lance',  range: 3, dmgMin: 1, dmgMax: 2, acc: 96,  falloff: 0,  kb: 1, pierce: true,
+    lance:   { id: 'lance',   name: 'Arc Lance',  range: 3, dmgMin: 1, dmgMax: 2, acc: 76,  falloff: 0,  kb: 1, pierce: true,
                blurb: 'Skewers the lane. Mind who stands behind it.' }
   };
   // Tier-up chain. The specials (hammer, lance, prod) arrive as their own
   // requisitions and are terminal — the chain is ordered so a trade-up never
   // feels like a downgrade.
+  // How each weapon reads on the board. A Blendo pass: hard edges, short and
+  // punchy, no soft glow doing the work. The scattergun throws a spray of short
+  // pellets; the railgun is one thin over-long lance that lingers; the prod is a
+  // jagged arc. Purely cosmetic — none of this touches the rules.
+  var SHOT_STYLE = {
+    pistol:  { style: 'tracer',  dur: 200, gap: 70,  flash: true },
+    carbine: { style: 'tracer',  dur: 180, gap: 60,  flash: true },
+    shotgun: { style: 'pellets', dur: 260, gap: 95,  flash: true, wide: 0.42 },
+    railgun: { style: 'lance',   dur: 520, gap: 130, flash: true, col: '#dff3ff' },
+    lance:   { style: 'lance',   dur: 420, gap: 110, flash: true, col: '#cfe9ff' },
+    hammer:  { style: 'slam',    dur: 260, gap: 95 },
+    shock:   { style: 'arc',     dur: 320, gap: 90 },
+    atk:     { style: 'tracer',  dur: 220, gap: 80 }
+  };
+
   var UPGRADE = { pistol: 'carbine', carbine: 'shotgun', shotgun: 'railgun' };
   var GRENADE = { name: 'Frag', range: 3, dmgMin: 1, dmgMax: 2, kb: 2 };
 
@@ -119,7 +134,7 @@
                atk: { range: 1, dmgMin: 2, dmgMax: 2, acc: 100 } },
     shooter: { id: 'shooter', name: 'Sniper',   hp: 2, move: 2, cost: 3, unlock: 2,
                flavour: 'Picks a lane and waits. Break its sightline and it is useless.',
-               atk: { range: 4, dmgMin: 2, dmgMax: 2, acc: 80, falloff: 6 } },
+               atk: { range: 4, dmgMin: 2, dmgMax: 2, acc: 68, falloff: 6 } },
     hacker:  { id: 'hacker',  name: 'Spider',   hp: 3, move: 3, cost: 3, unlock: 3,
                flavour: 'Does not kill you. Just reaches in and switches you off.',
                atk: { range: 1, dmgMin: 1, dmgMax: 1, acc: 100, disable: true } },
@@ -366,6 +381,9 @@
     return 0;
   }
   function hitChance(s, w, fx, fy, tx, ty) {
+    // Anything with a reach of one tile is a melee weapon and never misses —
+    // that is the whole reason to close the distance.
+    if (w.range <= 1) return 100;
     var d = cheb(fx, fy, tx, ty);
     var pct = w.acc - Math.max(0, d - 1) * (w.falloff || 0) - coverPen(s, fx, fy, tx, ty);
     return Math.max(40, Math.min(100, Math.round(pct)));
@@ -473,7 +491,8 @@
   // Resolve one shot. Shared by the player, the enemies and the solver.
   function fire(s, u, w, target, dice, fxq) {
     var dx = Math.sign(target.x - u.x), dy = Math.sign(target.y - u.y);
-    note(fxq, { kind: 'shot', fx: u.x, fy: u.y, tx: target.x, ty: target.y, side: u.side });
+    note(fxq, { kind: 'shot', fx: u.x, fy: u.y, tx: target.x, ty: target.y, side: u.side,
+      w: w.id || 'atk', pierce: !!w.pierce, kb: w.kb || 0 });
 
     if (target.kind === 'barrel') { explode(s, target.x, target.y, fxq, 0); return; }
     if (target.kind === 'console') { chargeCoolant(s, target.x, target.y, fxq); return; }
@@ -1115,7 +1134,7 @@
   // ============================================================
   // 9. RENDER — everything is drawn from state, every time.
   // ============================================================
-  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp, elFoes, elThreat, elSectorName;
+  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp, elFoes, elThreat, elSectorName, elCrt, elFlash;
 
   function neon(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur || 0; }
   // Canvas type. Heavy grotesque for labels, mono for figures — bigger than
@@ -1391,7 +1410,9 @@
     for (var i = 0; i < ops.length; i++) {
       var u = ops[i], th = threatTo(u);
       if (!th.count) continue;
-      var text = th.voided ? 'VOID' : (th.lethal ? 'KILLS ' : '−') + th.dmg;
+      // No words — the figure is the message. Lethal reads as red with a hard
+      // outline; a void shove costs everything, so it shows the full bar.
+      var text = '−' + (th.voided ? u.hp : th.dmg);
       var col = th.lethal ? C.enemy : C.warn;
       // sits above the operative; badge() clamps it so a top-row token is fine
       badge(cx(u.rx), u.ry * T, text, col, C.ink, th.lethal);
@@ -1410,7 +1431,7 @@
         var vt = shots[k].hits[q];
         if (vt.side !== 'enemy') continue;
         var pct = hitChance(G, w, u.x, u.y, vt.x, vt.y);
-        odds(vt.x, vt.y, pct >= 100 ? 'SURE' : pct + '%', pct >= 85 ? C.mint : pct >= 60 ? C.ally : C.warn);
+        odds(vt.x, vt.y, pct + '%', pct >= 85 ? C.mint : pct >= 60 ? C.ally : C.warn);
       }
     }
   }
@@ -1690,20 +1711,107 @@
 
   function drawFx() {
     var T = G.tile, i;
+
+    // ---- rings: hard-edged shockwaves, not soft haloes ----
     for (i = 0; i < G.rings.length; i++) {
       var rg = G.rings[i], p = rg.t / rg.dur;
       ctx.globalAlpha = Math.max(0, 1 - p);
-      ctx.strokeStyle = rg.color; ctx.lineWidth = 3; neon(rg.color, 18);
-      ctx.beginPath(); ctx.arc(cx(rg.x), cy(rg.y), T * (.2 + p * 1.1), 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = rg.color;
+      ctx.lineWidth = rg.hard ? 4 * (1 - p) + 1 : 3;
+      neon(rg.color, rg.small ? 22 : 18);
+      var rad = T * (rg.small ? (.10 + p * .34) : (.2 + p * 1.1));
+      if (rg.hard) {
+        // an octagon reads as a blast, a circle reads as a glow
+        ctx.beginPath();
+        for (var v = 0; v < 8; v++) {
+          var a = Math.PI / 8 + v * Math.PI / 4;
+          var px2 = cx(rg.x) + Math.cos(a) * rad, py2 = cy(rg.y) + Math.sin(a) * rad;
+          if (v) ctx.lineTo(px2, py2); else ctx.moveTo(px2, py2);
+        }
+        ctx.closePath(); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(cx(rg.x), cy(rg.y), rad, 0, Math.PI * 2); ctx.stroke();
+      }
       noNeon(); ctx.globalAlpha = 1;
     }
+
+    // ---- shards: debris thrown out of a blast ----
+    for (i = 0; i < G.shards.length; i++) {
+      var sh = G.shards[i], sp = sh.t / sh.dur;
+      ctx.globalAlpha = Math.max(0, 1 - sp);
+      ctx.strokeStyle = sh.color; ctx.lineWidth = 2;
+      var d0 = T * (.22 + sp * sh.len * 1.5), d1 = d0 + T * .18 * (1 - sp);
+      ctx.beginPath();
+      ctx.moveTo(cx(sh.x) + Math.cos(sh.a) * d0, cy(sh.y) + Math.sin(sh.a) * d0);
+      ctx.lineTo(cx(sh.x) + Math.cos(sh.a) * d1, cy(sh.y) + Math.sin(sh.a) * d1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- beams: one signature per weapon ----
     for (i = 0; i < G.beams.length; i++) {
-      var bm = G.beams[i];
-      ctx.globalAlpha = Math.max(0, 1 - bm.t / bm.dur);
-      ctx.strokeStyle = bm.color; ctx.lineWidth = 3; neon(bm.color, 14);
-      ctx.beginPath(); ctx.moveTo(cx(bm.fx), cy(bm.fy)); ctx.lineTo(cx(bm.tx), cy(bm.ty)); ctx.stroke();
-      noNeon(); ctx.globalAlpha = 1;
+      var bm = G.beams[i], bp = bm.t / bm.dur, fade = Math.max(0, 1 - bp);
+      var x0 = cx(bm.fx), y0 = cy(bm.fy), x1 = cx(bm.tx), y1 = cy(bm.ty);
+      var dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var ux = dx / len, uy = dy / len, nx = -uy, ny = ux;   // unit + normal
+      ctx.globalAlpha = fade;
+      ctx.strokeStyle = bm.color;
+
+      if (bm.style === 'pellets') {
+        // a spray: short dashes fanned across the lane, arriving together
+        ctx.lineWidth = 2;
+        for (var q = 0; q < 7; q++) {
+          var spread = ((q / 6) - .5) * bm.wide * T * 2;
+          var reach = len * (.55 + (q % 3) * .18);
+          var sx = x0 + ux * T * .3 + nx * spread * .25;
+          var sy = y0 + uy * T * .3 + ny * spread * .25;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(x0 + ux * reach + nx * spread, y0 + uy * reach + ny * spread);
+          ctx.stroke();
+        }
+      } else if (bm.style === 'lance') {
+        // one thin over-travelled line with a bright core that lingers
+        ctx.lineWidth = 1;
+        neon(bm.color, 20);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x0 + ux * (len + T * 1.6), y0 + uy * (len + T * 1.6));
+        ctx.stroke();
+        ctx.globalAlpha = fade * fade;      // core fades faster
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        noNeon();
+      } else if (bm.style === 'arc') {
+        // a jagged discharge that re-scatters each frame
+        ctx.lineWidth = 2; neon(bm.color, 16);
+        ctx.beginPath(); ctx.moveTo(x0, y0);
+        for (var k = 1; k <= 4; k++) {
+          var tt = k / 4, jit = (k % 2 ? 1 : -1) * T * .14 * (1 - bp);
+          ctx.lineTo(x0 + dx * tt + nx * jit, y0 + dy * tt + ny * jit);
+        }
+        ctx.stroke(); noNeon();
+      } else if (bm.style === 'slam') {
+        // no projectile — an impact wedge at the target
+        ctx.lineWidth = 3; neon(bm.color, 14);
+        ctx.beginPath();
+        ctx.moveTo(x1 - ux * T * .42 + nx * T * .3, y1 - uy * T * .42 + ny * T * .3);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x1 - ux * T * .42 - nx * T * .3, y1 - uy * T * .42 - ny * T * .3);
+        ctx.stroke(); noNeon();
+      } else {
+        // tracer: a short bolt travelling the lane
+        ctx.lineWidth = 3; neon(bm.color, 14);
+        var head = Math.min(1, bp * 2.1), tail = Math.max(0, head - .38);
+        ctx.beginPath();
+        ctx.moveTo(x0 + dx * tail, y0 + dy * tail);
+        ctx.lineTo(x0 + dx * head, y0 + dy * head);
+        ctx.stroke(); noNeon();
+      }
+      ctx.globalAlpha = 1;
     }
+
+    // ---- floating numbers ----
     for (i = 0; i < G.fx.length; i++) {
       var f = G.fx[i], pr = f.t / f.dur;
       ctx.globalAlpha = Math.max(0, 1 - pr);
@@ -1746,7 +1854,7 @@
   //     requested while something is actually moving.
   // ============================================================
   function isBusy() {
-    if (G.fx.length || G.rings.length || G.beams.length) return true;
+    if (G.fx.length || G.rings.length || G.beams.length || G.shards.length) return true;
     for (var i = 0; i < G.units.length; i++) {
       var u = G.units[i];
       if (u.rpath && u.rpath.length) return true;
@@ -1775,7 +1883,7 @@
         busy = true;
       } else if (u.rpath && u.rpath.length) { u.rpath.shift(); busy = true; }
     }
-    [G.fx, G.rings, G.beams].forEach(function (list) {
+    [G.fx, G.rings, G.beams, G.shards].forEach(function (list) {
       for (var j = list.length - 1; j >= 0; j--) {
         var o = list[j];
         if (o.delay > 0) { o.delay -= dt; busy = true; continue; }
@@ -1790,6 +1898,24 @@
   }
   function ensureTick() { if (raf === null) { lastTs = 0; raf = requestAnimationFrame(tick); } }
 
+  // A hit on one of your own kicks the tube: interference on the CRT layer plus
+  // a single white frame. Scheduled on the same delay as the damage number so it
+  // lands with the hit, not before it.
+  var crtTimer = null;
+  function crtHit(delay) {
+    if (!elCrt) return;
+    setTimeout(function () {
+      elCrt.classList.remove('crt--hit'); void elCrt.offsetWidth;   // restart it
+      elCrt.classList.add('crt--hit');
+      if (elFlash) { elFlash.classList.remove('hitflash--on'); void elFlash.offsetWidth; elFlash.classList.add('hitflash--on'); }
+      clearTimeout(crtTimer);
+      crtTimer = setTimeout(function () {
+        elCrt.classList.remove('crt--hit');
+        if (elFlash) elFlash.classList.remove('hitflash--on');
+      }, 320);
+    }, Math.max(0, delay || 0));
+  }
+
   // Animations are decoration — they must never be able to hold up the game.
   // If frames are starved (backgrounded tab) or the player is impatient, we
   // fast-forward to the finished state instead of waiting.
@@ -1798,7 +1924,7 @@
       var u = G.units[i];
       u.rx = u.x; u.ry = u.y; u.rpath = [];
     }
-    G.fx.length = 0; G.rings.length = 0; G.beams.length = 0;
+    G.fx.length = 0; G.rings.length = 0; G.beams.length = 0; G.shards.length = 0;
   }
   function waitIdle(cb) {
     ensureTick();
@@ -1826,20 +1952,42 @@
           (paths[f.id] = paths[f.id] || []).push({ x: f.x, y: f.y });
           delay += 70; break;
         case 'shot':
-          G.beams.push({ fx: f.fx, fy: f.fy, tx: f.tx, ty: f.ty, color: f.side === 'player' ? C.ally : C.enemy, t: 0, dur: 260, delay: delay });
-          delay += 90; break;
+          // Each weapon gets its own signature — a scattergun should not read
+          // like a railgun. Style drives how drawFx paints the line.
+          var st = SHOT_STYLE[f.w] || SHOT_STYLE.atk;
+          G.beams.push({
+            fx: f.fx, fy: f.fy, tx: f.tx, ty: f.ty,
+            color: f.side === 'player' ? (st.col || C.ally) : C.enemy,
+            style: st.style, dur: st.dur, wide: st.wide || 0, t: 0, delay: delay
+          });
+          if (st.flash) G.rings.push({ x: f.fx, y: f.fy, color: f.side === 'player' ? (st.col || C.ally) : C.enemy,
+                                       t: 0, dur: 220, delay: delay, small: true });
+          delay += st.gap; break;
         case 'lob':
           G.beams.push({ fx: f.fx, fy: f.fy, tx: f.tx, ty: f.ty, color: C.warn, t: 0, dur: 300, delay: delay });
           delay += 120; break;
         case 'dmg':
           G.fx.push({ x: f.x, y: f.y, text: '-' + f.n + (f.label ? ' ' + f.label : ''), color: f.side === 'player' ? C.enemy : C.mint, t: 0, dur: 900, delay: delay });
+          if (f.side === 'player') crtHit(delay);      // interference burst
           delay += 70; break;
         case 'miss':
           G.fx.push({ x: f.x, y: f.y, text: 'MISS', color: C.dim, t: 0, dur: 800, delay: delay });
           delay += 70; break;
         case 'boom':
-          G.rings.push({ x: f.x, y: f.y, color: C.barrel, t: 0, dur: 520, delay: delay });
+          // hard ring, a bright core, and shrapnel thrown outward
+          G.rings.push({ x: f.x, y: f.y, color: C.barrel, t: 0, dur: 520, delay: delay, hard: true });
+          G.rings.push({ x: f.x, y: f.y, color: '#fff5e0', t: 0, dur: 190, delay: delay, small: true });
+          for (var sd = 0; sd < 7; sd++) {
+            G.shards.push({ x: f.x, y: f.y, a: (Math.PI * 2 / 7) * sd + sd * 0.7,
+                            len: 0.5 + (sd % 3) * 0.28, color: C.barrel, t: 0, dur: 430, delay: delay });
+          }
           delay += 110; break;
+        case 'rubble':
+          for (var rd = 0; rd < 4; rd++) {
+            G.shards.push({ x: f.x, y: f.y, a: (Math.PI / 2) * rd + 0.5,
+                            len: 0.42, color: C.wallTop, t: 0, dur: 360, delay: delay });
+          }
+          break;
         case 'zap':
           G.rings.push({ x: f.x, y: f.y, color: C.waterLit, t: 0, dur: 460, delay: delay }); break;
         case 'fall':
@@ -2149,7 +2297,7 @@
       d.rows.push(['Its attack', def.atk.range === 0
         ? 'blast ' + u.atk.dmgMax
         : u.atk.dmgMax + ' dmg @ ' + u.atk.range]);
-      d.rows.push(['Its turn', 'moves, then attacks once']);
+      d.rows.push(['Its turn', 'move, then attack']);
       if (u.atk.kb) d.rows.push(['Its shove', u.atk.kb + ' tile' + (u.atk.kb === 1 ? '' : 's')]);
       if (def.kbResist) d.rows.push(['Braced', '−' + def.kbResist + ' shove']);
       if (G.foe.taken.length) d.perks = foeLabels();
@@ -2226,7 +2374,7 @@
         var pv = previewShot(sel, it.w, it.shot);
         a.tag = 'Firing solution';
         if (pv.console) {
-          a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+          a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' },
                     { v: String(SHOCK_DMG), label: 'shock', cls: 'big--dmg' }];
           a.rows.push(['Shot', 'trips the console']);
           a.rows.push(['Charges', 'every coolant pool']);
@@ -2237,7 +2385,7 @@
           a.rows.push(['Weapon', it.w.name]);
           a.rows.push(['Caught', pv.blast + ' unit' + (pv.blast === 1 ? '' : 's')]);
         } else {
-          a.bigs = [{ v: pv.sure ? 'SURE' : pv.pct + '%', label: 'to hit', cls: pv.sure ? 'big--sure' : 'big--hit' },
+          a.bigs = [{ v: pv.pct + '%', label: 'to hit', cls: pv.sure ? 'big--sure' : 'big--hit' },
                     { v: it.w.dmgMin + '–' + it.w.dmgMax, label: 'damage', cls: 'big--dmg' }];
           a.rows.push(['Weapon', it.w.name]);
           a.rows.push(['Range', cheb(sel.x, sel.y, it.x, it.y) + ' of ' + it.w.range]);
@@ -2258,7 +2406,7 @@
         d.confirm = { text: armed ? 'Again to fire' : 'Tap to aim', state: armed ? (pv.allies ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'grenade') {
         a.tag = 'Frag';
-        a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+        a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' },
                   { v: GRENADE.dmgMin + '–' + GRENADE.dmgMax, label: 'damage', cls: 'big--dmg' }];
         var caught = plus(it.x, it.y).map(function (c) { return unitAt(G, c.x, c.y); }).filter(Boolean);
         var mine = caught.filter(function (v2) { return v2.side === 'player'; }).length;
@@ -2585,14 +2733,13 @@
     return '<div class="how__row"><span class="how__n">' + n + '</span><p class="how__t">' + html + '</p></div>';
   }
   var RULES = '<div class="how">' +
-    rule(1, '<b>Each operative gets a move AND an action</b>, every turn. The square and circle under a token are the two you still have.') +
-    rule(2, '<b>Tap once to aim, again to commit.</b> The first tap shows the numbers.') +
-    rule(3, '<b>Guns fire eight ways.</b> Diagonals count. Bulkheads stop a shot.') +
-    rule(4, '<b>Hostiles telegraph where they move, not what they aim at.</b> The dashed line is the walk they have planned; each one moves, then attacks once.') +
-    rule(5, '<b>Read the danger off your own squad.</b> The number over an operative is the <em>total</em> about to land on them from every hostile at once. Red means it kills them.') +
-    rule(6, '<s>Guns chip. Shoves kill.</s> A slam into a bulkhead hurts more than most shots, and the void is always fatal. Aim at where things will land.') +
-    rule(7, '<b>The room is destructible.</b> Barrels blow out bulkheads, terminals can be shot from range, and blast doors stop gunfire but not feet.') +
-    rule(8, '<b>Hostiles draft too.</b> Every second sector they reach the crate first and take the best thing in it.') +
+    rule(1, 'Units get a move AND an action every turn.') +
+    rule(2, 'Tap once to plan, again to commit.') +
+    rule(3, 'Guns fire in the eight cardinal directions.') +
+    rule(4, 'Hostiles telegraph where they move, not where they aim.') +
+    rule(5, 'The number over your units is the damage about to land.') +
+    rule(6, 'Guns use RNG but can affect environment.') +
+    rule(7, 'You get a perk every level. Enemies get one every 2.') +
     '</div>';
 
   function titleScreen() {
@@ -2951,7 +3098,7 @@
     G.grenades = built.grenades;
     G.turn = 1;
     G.phase = 'PLAYER';
-    G.fx = []; G.rings = []; G.beams = [];
+    G.fx = []; G.rings = []; G.beams = []; G.shards = [];
     G.units.forEach(function (u) { u.rx = u.x; u.ry = u.y; u.rpath = []; });
     computeIntents(G);
     autoSelect();
@@ -3005,6 +3152,8 @@
     elFoes = document.querySelector('[data-foes]');
     elThreat = document.querySelector('[data-threat]');
     elSectorName = document.querySelector('[data-sector-name]');
+    elCrt = document.querySelector('[data-crt]');
+    elFlash = document.querySelector('[data-flash]');
 
     G = {
       tiles: blankTiles(), units: [], squad: [], grenades: 0,
@@ -3012,7 +3161,7 @@
       foe: { count: 0, dmg: 0, hp: 0, move: 0, acc: 0, sight: 0, kb: 0, soak: 0, brace: 0,
              jolt: false, shrapnel: false, jammed: false, jamNext: false, taken: [] },
       mods: { dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false },
-      fx: [], rings: [], beams: [],
+      fx: [], rings: [], beams: [], shards: [],
       ui: { mode: 'SELECT', selId: null, hover: null, path: null, pending: null }
     };
 
