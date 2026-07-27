@@ -174,6 +174,9 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 .tip__bigs{display:flex;gap:.5rem;justify-content:space-around;
   padding:.35rem 0 .45rem;background:var(--panel2);margin-bottom:.35rem;}
 .tip__note{margin:.3rem 0 0;font-size:.72rem;line-height:1.55;color:#b8afd8;}
+/* flavour caption: sits under the name, quieter than the stats it precedes */
+.tip__flavour{margin:0 0 .45rem;font-size:.72rem;line-height:1.4;font-style:italic;
+  color:var(--dim);border-left:2px solid var(--edge);padding-left:.5rem;}
 .tip__warn{margin:.35rem 0 0;padding:.3rem .4rem;font-size:.72rem;line-height:1.4;
   color:var(--ink);background:var(--amber);font-weight:600;}
 .tip__kill{margin:.35rem 0 0;padding:.32rem .4rem;font-family:var(--heavy);font-size:.7rem;

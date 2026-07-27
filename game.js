@@ -94,14 +94,19 @@
 
   var ENEMIES = {
     grunt:   { id: 'grunt',   name: 'Drone',    hp: 2, move: 3, cost: 2, unlock: 1,
+               flavour: 'Cheap, disposable, and always sent in first.',
                atk: { range: 1, dmgMin: 2, dmgMax: 2, acc: 100 } },
     shooter: { id: 'shooter', name: 'Sniper',   hp: 2, move: 2, cost: 3, unlock: 2,
+               flavour: 'Picks a lane and waits. Break its sightline and it is useless.',
                atk: { range: 4, dmgMin: 2, dmgMax: 2, acc: 80, falloff: 6 } },
     hacker:  { id: 'hacker',  name: 'Spider',   hp: 3, move: 3, cost: 3, unlock: 3,
+               flavour: 'Does not kill you. Just reaches in and switches you off.',
                atk: { range: 1, dmgMin: 1, dmgMax: 1, acc: 100, disable: true } },
     bruiser: { id: 'bruiser', name: 'Enforcer', hp: 4, move: 2, cost: 4, unlock: 4, kbResist: 1,
+               flavour: 'Slow, armoured, and hits like a dropped safe.',
                atk: { range: 1, dmgMin: 3, dmgMax: 3, acc: 100 } },
     bomber:  { id: 'bomber',  name: 'Sapper',   hp: 1, move: 3, cost: 3, unlock: 5,
+               flavour: 'A mindless automaton that charges in and detonates. Watch out.',
                atk: { range: 0, dmgMin: 3, dmgMax: 3, acc: 100, blast: true } }
   };
 
@@ -2071,7 +2076,7 @@
 
     if (u && u.side === 'enemy') {
       var def = ENEMIES[u.typeId];
-      d.tag = 'Threat assessment'; d.name = def.name; d.kind = 'foe';
+      d.tag = 'Threat assessment'; d.name = def.name; d.kind = 'foe'; d.flavour = def.flavour;
       d.sub = 'hostile · ' + (def.atk.range === 0 ? 'suicide charge' : def.atk.range === 1 ? 'close quarters' : 'ranged');
       d.rows.push(['Hull', u.hp + ' / ' + u.maxHp]);
       d.rows.push(['Move', def.move]);
@@ -2096,6 +2101,7 @@
     } else if (u && u.side === 'player') {
       var wp = gun(u);
       d.tag = 'Operative'; d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
+      d.flavour = OP_FLAVOUR[u.name] || 'Contract operative. In it for the pay and the quiet.';
       d.bigs = [
         { v: u.hp + '/' + u.maxHp, label: 'hull', cls: '' },
         { v: String(u.move), label: 'move', cls: '' },
@@ -2122,20 +2128,29 @@
       var th = threatened(u.x, u.y);
       if (th && !inc.count) d.warn.push(ENEMIES[th.typeId].name + ' can reach this tile.');
     } else {
+      // [name, functional note, flavour caption]
       var TERRAIN = {
-        pit: ['Void', 'Shove anything in and it is gone. No dice.'],
-        barrel: ['Fuel barrel', BLAST_DMG + ' damage in a cross. Chains.'],
-        water: ['Coolant', 'Harmless until charged — then ' + SHOCK_DMG + ' damage.'],
-        console: ['Console', tt.spent ? 'Burned out.' : 'Charges every coolant pool.'],
+        pit: ['Void', 'Shove anything in and it is gone. No dice.',
+              'A hole in the deck plating. It does not have a bottom.'],
+        barrel: ['Fuel barrel', BLAST_DMG + ' damage in a cross. Chains.',
+              'Volatile promethium. One spark and the whole cell goes.'],
+        water: ['Coolant', 'Harmless until charged — then ' + SHOCK_DMG + ' damage.',
+              'Reactor runoff. Fine to wade through, until it is live.'],
+        console: ['Console', tt.spent ? 'Burned out.' : 'Charges every coolant pool.',
+              'A dumb terminal that still answers to anyone standing close.'],
         door: ['Blast door', tt.open
           ? 'Open. Seal it to cut this lane — nothing moves or shoots through.'
-          : 'Sealed. Blocks movement and every line of fire.'],
-        wall: ['Bulkhead', 'Stops movement and fire. Gives cover.'],
-        floor: ['Deck', '']
+          : 'Sealed. Blocks movement and every line of fire.',
+              'Heavy shutter on a dead servo. Someone works it by hand.'],
+        wall: ['Bulkhead', 'Stops movement and fire. Gives cover.',
+              'Structural plating. Nothing short of the void moves it.'],
+        floor: ['Deck', '',
+              'Scuffed decking. Whatever happened here happened often.']
       };
       var info = TERRAIN[tt.t] || TERRAIN.floor;
       d.name = info[0];
       d.note = info[1];
+      d.flavour = info[2];
     }
 
     // ---- the consequence of clicking, as its own block ----
@@ -2282,6 +2297,7 @@
     // subject block
     if (d.bigs || d.rows.length || d.avail || d.note || d.warn.length || d.perks) {
       h += '<div class="tip__block">';
+      if (d.flavour) h += '<p class="tip__flavour">' + d.flavour + '</p>';
       if (d.bigs) h += bigs(d.bigs);
       if (d.avail) {
         h += led('Unspent', '<span class="av"><i class="' + (d.avail.move ? 'on' : '') + '"></i>' +
@@ -2819,6 +2835,17 @@
   // 15. RUN / LEVEL SETUP
   // ============================================================
   var NAMES = ['VEX', 'NOMI', 'KADE', 'RIL', 'JUNO', 'ASH', 'ODEN', 'PIX'];
+  // A one-liner per callsign, so the squad reads like people rather than pawns.
+  var OP_FLAVOUR = {
+    VEX:  'Twitchy trigger finger. Volunteered for this.',
+    NOMI: 'Ran the numbers, came anyway.',
+    KADE: 'Quiet, reliable, and holding two confirmed grudges.',
+    RIL:  'Talks to the drones. Swears they answer.',
+    JUNO: 'Third tour down here. Does not flinch anymore.',
+    ASH:  'Walked out of a wreck no one else did.',
+    ODEN: 'Older than the gear. Always knows where the void is.',
+    PIX:  'Youngest on the roster, somehow the calmest.'
+  };
   var nameN = 0;
   function newOp(weaponId) {
     return { id: uid('op'), name: NAMES[nameN++ % NAMES.length], maxHp: BASE_HP, move: BASE_MOVE, weaponId: weaponId, perks: [] };
