@@ -1,5 +1,7 @@
 /* ============================================================
    joemartin.work — "every section its own world"
+   Blocks below are NOT in display order — the running order and its
+   numbering live in index.html. Find a block by name.
    A shared frame (topbar, hero, section labels, footer) holds
    twelve bespoke section cards, each styled as the kind of thing
    the project actually is. Plain CSS, no build step.
@@ -77,7 +79,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .video{position:relative;}
 .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;}
 
-/* ============ 01 PostHog — SaaS app (cream + #f54e00) ============ */
+/* ============ PostHog — SaaS app (cream + #f54e00) ============ */
 .ph{border:1px solid #111;border-radius:12px;overflow:hidden;background:#eeefe9;box-shadow:0 18px 44px rgba(0,0,0,.10);}
 .ph__bar{display:flex;align-items:center;gap:.5rem;padding:.6rem .9rem;background:#e3e4dc;border-bottom:1px solid #cfd0c6;}
 .ph__bar i{width:11px;height:11px;border-radius:50%;}
@@ -89,7 +91,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .ph__go{margin-top:.4rem;display:inline-block;background:#cf4200;color:#fff;font-weight:600;font-size:.85rem;padding:.55rem 1.1rem;border-radius:8px;text-decoration:none;}
 .ph__shot img{border:1px solid #cfd0c6;border-radius:8px;}
 
-/* ============ 02 DeskHog — IKEA manual (white/#0058A3/#FFDA1A) ============ */
+/* ============ DeskHog — IKEA manual (white/#0058A3/#FFDA1A) ============ */
 .ik{background:#fff;border:2px solid #111;border-radius:6px;overflow:hidden;}
 .ik__top{display:flex;justify-content:space-between;align-items:center;background:#0058a3;color:#ffda1a;padding:.7rem 1.1rem;}
 .ik__top .lg{font-weight:800;font-size:1.25rem;}
@@ -103,7 +105,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .ik__diagram{border:2px solid #111;border-radius:6px;padding:1rem;background:#fafafa;position:sticky;top:5rem;}
 .ik__screen{aspect-ratio:16/9;border:2px solid #111;border-radius:4px;overflow:hidden;background:#000;}
 
-/* ============ 03 Pollen — neon on foliage ============ */
+/* ============ Pollen — neon on foliage ============ */
 .pol{border-radius:14px;padding:2.2rem;color:#eafff0;
      background:radial-gradient(120% 130% at 15% 0%, #12291b, #0a150e);
      display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;}
@@ -114,7 +116,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
          color:#eafff0;border:1px solid #7fe6a8;padding:.55rem 1rem;text-decoration:none;text-shadow:0 0 6px #57e39a;}
 .pol__media img{width:100%;border:1px solid #2c4a38;border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45);display:block;}
 
-/* ============ 04 Laundrapp — app store card ============ */
+/* ============ Laundrapp — app store card ============ */
 .la{display:grid;grid-template-columns:1fr 1fr;border-radius:16px;overflow:hidden;background:#0a6299;color:#fff;box-shadow:0 18px 44px rgba(10,98,153,.32);}
 .la__l{padding:2rem;}
 .la__head{display:flex;align-items:center;gap:.9rem;margin-bottom:1rem;}
@@ -127,7 +129,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .la__r{background:#084f80;}
 .la__r img{width:100%;height:100%;object-fit:cover;min-height:280px;}
 
-/* ============ 05 The Vigil — CRT panel + carousel ============ */
+/* ============ The Vigil — CRT panel + carousel ============ */
 .crt{position:relative;background:#05070c;border-radius:10px;padding:2rem;overflow:hidden;border:1px solid #12324a;
      display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;align-items:center;}
 .crt::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
@@ -141,7 +143,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .crt__view .carousel__track{border-color:#1d4a6b;background:#05070c;}
 .crt__view .carousel__slide img{image-rendering:pixelated;}
 
-/* ============ 06 Unlimited Hyperbole — podcast ============ */
+/* ============ Unlimited Hyperbole — podcast ============ */
 .pod{background:#1b1726;color:#efeaff;border-radius:16px;overflow:hidden;box-shadow:0 16px 40px rgba(0,0,0,.2);}
 .pod__player{display:flex;gap:1.3rem;align-items:center;padding:1.4rem 1.6rem;border-bottom:1px solid #322c45;}
 .pod__art{width:96px;height:96px;border-radius:12px;overflow:hidden;flex:0 0 auto;border:1px solid #3a3550;}
@@ -159,7 +161,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .pod__notes a{color:#c4b5fd;text-underline-offset:3px;}
 .pod__go{display:inline-block;font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:#efeaff;border-bottom:1px solid #8b5cf6;padding-bottom:3px;text-decoration:none;}
 
-/* ============ 07 Split Decision — quiz ============ */
+/* ============ Split Decision — quiz ============ */
 .quiz{background:#ffcf3f;border:3px solid #17140f;border-radius:16px;padding:2rem;
       display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;}
 .quiz__text h2{font-family:var(--serif);font-size:2rem;margin-bottom:.6rem;color:#17140f;}
@@ -179,7 +181,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .tcard__opts .opt.b{background:#17140f;color:#ffcf3f;}
 .tcard__opts .vs{font-family:var(--serif);font-style:italic;text-align:center;font-size:.85rem;color:#7a6a1e;}
 
-/* ============ 08 Fractured Skyline — cyberpunk ============ */
+/* ============ Fractured Skyline — cyberpunk ============ */
 .cy{position:relative;border-radius:14px;overflow:hidden;padding:2rem;color:#eafcff;border:1px solid #35204d;
     background:linear-gradient(rgba(6,4,20,.86),rgba(10,4,26,.92)),url('images/fractured-skyline.jpg') center/cover;
     display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;align-items:center;}
@@ -190,7 +192,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .cy__go{display:block;font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:#0a0416;background:#ff2d95;padding:.55rem 1.1rem;text-decoration:none;font-weight:600;width:max-content;}
 .cy__frame{aspect-ratio:16/9;border:1px solid #ff2d95;box-shadow:0 0 24px rgba(255,45,149,.4);border-radius:6px;overflow:hidden;}
 
-/* ============ 09 Crywankface — itch.io ============ */
+/* ============ Crywankface — itch.io ============ */
 /* Crywankface — MS Paint window */
 .paint{background:#c0c0c0;padding:3px;font-family:Tahoma,"Segoe UI","MS Sans Serif",Geneva,sans-serif;color:#000;
        border-top:2px solid #dfdfdf;border-left:2px solid #dfdfdf;border-right:2px solid #808080;border-bottom:2px solid #808080;
@@ -214,7 +216,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .paint__palette{display:flex;flex-wrap:wrap;gap:2px;padding:5px 6px;}
 .paint__palette i{width:16px;height:16px;display:block;border:1px solid #808080;}
 
-/* ============ 10 Games preservation — archive ============ */
+/* ============ Games preservation — archive ============ */
 .arc{background:#e9e0c9;border:1px solid #b9ad8a;border-radius:3px;padding:1.9rem;position:relative;
      font-family:var(--mono);color:#2e2a20;box-shadow:inset 0 0 60px rgba(120,100,60,.12);
      display:grid;grid-template-columns:1.05fr .95fr;gap:2rem;align-items:center;}
@@ -228,7 +230,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .arc p a{color:#9e3327;text-underline-offset:2px;}
 .arc__go{display:inline-block;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#9e3327;text-decoration:none;border-bottom:1px solid #9e3327;}
 
-/* ============ 11 Editorial work — newsprint ============ */
+/* ============ Editorial work — newsprint ============ */
 .news{background:#f3efe4;border:1px solid #d8d2c2;padding:1.9rem;
       display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;}
 .news__mast{display:flex;align-items:center;gap:1rem;border-bottom:3px double #17140f;padding-bottom:.5rem;}
@@ -241,7 +243,7 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .news__media img{width:100%;border:1px solid #cfc8b6;border-radius:8px;box-shadow:0 16px 40px rgba(23,20,15,.22);display:block;}
 .news__go{display:inline-block;margin-top:.6rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#b23b2e;text-decoration:none;border-bottom:1px solid #b23b2e;}
 
-/* ============ 07 Null Sector — neon tactics grid ============ */
+/* ============ Null Sector — neon tactics grid ============ */
 .tac{position:relative;border-radius:14px;overflow:hidden;padding:2rem;color:#eafcff;border:1px solid #35204d;
      background:radial-gradient(120% 130% at 85% 0%, #1b1140, #08060f 70%);
      display:grid;grid-template-columns:1fr 1fr;gap:1.8rem;align-items:center;}

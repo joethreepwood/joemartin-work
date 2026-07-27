@@ -68,29 +68,50 @@
   // ============================================================
   // 2. DATA
   // ============================================================
+  // Idea 18, the wordless heist: a run is a silent caper told only through the
+  // names of the rooms you pass. Read in order, sectors 1..n are the job —
+  // approach, break-in, the vault, the alarm, the run for the roof. Past the end
+  // of the list it loops with a pass number, because by then you are well off
+  // the plan.
+  var SECTOR_NAMES = [
+    'The Approach', 'Loading Dock', 'Service Corridor', 'Cold Storage',
+    'The Atrium', 'Records', 'Pump Room', 'The Long Gallery',
+    'Security Wing', 'The Vault Door', 'The Vault', 'Alarm Raised',
+    'Lockdown', 'Sub-Level', 'Coolant Deck', 'Freight Lift',
+    'Rooftop Stair', 'The Roof'
+  ];
+  function sectorName(level) {
+    if (level <= SECTOR_NAMES.length) return SECTOR_NAMES[level - 1];
+    var n = Math.floor((level - 1) / SECTOR_NAMES.length);
+    return SECTOR_NAMES[(level - 1) % SECTOR_NAMES.length] + ' \u00b7 ' + (n + 1);
+  }
+
   var BASE_HP = 5, BASE_MOVE = 3;
 
+  // Guns are deliberately weak and shoves are strong: a bullet chips, the room
+  // kills. Very little dies to gunfire alone in a turn, so every turn asks
+  // "where can I put this thing", not "can I out-damage it".
   var WEAPONS = {
-    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 2, dmgMax: 3, acc: 92,  falloff: 7,  kb: 1,
-               blurb: 'All-rounder. Loses accuracy with distance.' },
-    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 3, dmgMax: 5, acc: 96,  falloff: 14, kb: 2,
-               blurb: 'Short range, big shove. Best tool for the void.' },
-    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 2, dmgMax: 3, acc: 88,  falloff: 4,  kb: 0, pierce: true,
+    pistol:  { id: 'pistol',  name: 'Sidearm',    range: 4, dmgMin: 1, dmgMax: 2, acc: 92,  falloff: 7,  kb: 2,
+               blurb: 'Chips away, but shoves two tiles.' },
+    shotgun: { id: 'shotgun', name: 'Scattergun', range: 2, dmgMin: 2, dmgMax: 3, acc: 96,  falloff: 14, kb: 3,
+               blurb: 'Close range, huge shove. The void does the killing.' },
+    railgun: { id: 'railgun', name: 'Railgun',    range: 6, dmgMin: 1, dmgMax: 2, acc: 88,  falloff: 4,  kb: 1, pierce: true,
                blurb: 'Crosses the board. Pierces the lane — yours included.' },
-    shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 2, acc: 100, falloff: 0,  kb: 1, stun: true, electrify: true,
-               blurb: 'Adjacent only, never misses. Stuns and charges coolant.' },
-    carbine: { id: 'carbine', name: 'Carbine',    range: 3, dmgMin: 3, dmgMax: 4, acc: 94,  falloff: 6,  kb: 1,
-               blurb: 'Steadier than the sidearm, and it hits harder.' },
-    hammer:  { id: 'hammer',  name: 'Breach Hammer', range: 1, dmgMin: 4, dmgMax: 6, acc: 100, falloff: 0, kb: 3,
-               blurb: 'Adjacent, never misses, and shoves three tiles. A void on the far side is a kill.' },
-    lance:   { id: 'lance',   name: 'Arc Lance',  range: 3, dmgMin: 2, dmgMax: 3, acc: 96,  falloff: 0,  kb: 0, pierce: true,
-               blurb: 'Skewers everything in the lane. Mind who is standing behind it.' }
+    shock:   { id: 'shock',   name: 'Shock Prod', range: 1, dmgMin: 1, dmgMax: 1, acc: 100, falloff: 0,  kb: 2, stun: true, electrify: true,
+               blurb: 'Adjacent, never misses. Stuns, shoves, charges coolant.' },
+    carbine: { id: 'carbine', name: 'Carbine',    range: 3, dmgMin: 2, dmgMax: 2, acc: 94,  falloff: 6,  kb: 2,
+               blurb: 'Steadier than the sidearm, shoves as hard.' },
+    hammer:  { id: 'hammer',  name: 'Breach Hammer', range: 1, dmgMin: 2, dmgMax: 3, acc: 100, falloff: 0, kb: 4,
+               blurb: 'Adjacent, never misses, shoves four tiles. A launcher.' },
+    lance:   { id: 'lance',   name: 'Arc Lance',  range: 3, dmgMin: 1, dmgMax: 2, acc: 96,  falloff: 0,  kb: 1, pierce: true,
+               blurb: 'Skewers the lane. Mind who stands behind it.' }
   };
   // Tier-up chain. The specials (hammer, lance, prod) arrive as their own
   // requisitions and are terminal — the chain is ordered so a trade-up never
   // feels like a downgrade.
   var UPGRADE = { pistol: 'carbine', carbine: 'shotgun', shotgun: 'railgun' };
-  var GRENADE = { name: 'Frag', range: 3, dmgMin: 2, dmgMax: 3, kb: 1 };
+  var GRENADE = { name: 'Frag', range: 3, dmgMin: 1, dmgMax: 2, kb: 2 };
 
   var ENEMIES = {
     grunt:   { id: 'grunt',   name: 'Drone',    hp: 2, move: 3, cost: 2, unlock: 1,
@@ -112,7 +133,7 @@
 
   var BLAST_DMG = 3;   // barrels and sappers
   var SHOCK_DMG = 3;   // standing in electrified coolant
-  var BONK_DMG = 1;    // slammed into a wall or another unit
+  var BONK_DMG = 2;    // slammed into a wall or another unit — where the damage went
 
   // ============================================================
   // 3. STATE + small helpers
@@ -163,9 +184,11 @@
   // use this — otherwise standing corner-to-corner with something feels broken.
   function cheb(ax, ay, bx, by) { return Math.max(Math.abs(ax - bx), Math.abs(ay - by)); }
 
+  // A blast door never stops feet — you shoulder through it either way. Shut, it
+  // stops line of sight and gunfire. So it is a lane-breaker and a place to
+  // hide, not a wall that pens anyone in.
   function blocksMove(s, x, y) {
     var t = at(s, x, y).t;
-    if (t === 'door') return !at(s, x, y).open;
     return t === 'wall' || t === 'barrel' || t === 'console' || t === 'pit';
   }
   function blocksSight(s, x, y) {
@@ -174,8 +197,7 @@
     return t === 'wall' || t === 'barrel' || t === 'console';
   }
   function blocksKnock(s, x, y) {
-    var t = at(s, x, y).t;
-    if (t === 'door') return !at(s, x, y).open;
+    var t = at(s, x, y).t;      // doors let bodies through, same as feet
     return t === 'wall' || t === 'barrel' || t === 'console';
   }
 
@@ -292,8 +314,11 @@
 
   // Walk one lane, orthogonal or diagonal. Units and shootable barrels are
   // targets; walls, consoles and shut doors stop the shot.
+  // Returns units in the lane plus the first shootable prop that stops the shot:
+  // a barrel (detonates) or an unspent console (a bullet trips it). Consoles and
+  // barrels both blocked sight before; now they are targets in their own right.
   function lineScan(s, fx, fy, dx, dy, range, pierce) {
-    var hits = [], barrel = null;
+    var hits = [], prop = null;
     for (var i = 1; i <= range; i++) {
       var x = fx + dx * i, y = fy + dy * i;
       if (!inB(x, y)) break;
@@ -303,12 +328,14 @@
         var ax = x - dx, ay = y, bx = x, by = y - dy;
         if (inB(ax, ay) && inB(bx, by) && blocksSight(s, ax, ay) && blocksSight(s, bx, by)) break;
       }
-      if (at(s, x, y).t === 'barrel') { barrel = { x: x, y: y }; break; }
+      var tt = at(s, x, y).t;
+      if (tt === 'barrel') { prop = { x: x, y: y, kind: 'barrel' }; break; }
+      if (tt === 'console' && !at(s, x, y).spent) { prop = { x: x, y: y, kind: 'console' }; break; }
       if (blocksSight(s, x, y)) break;
       var u = unitAt(s, x, y);
       if (u) { hits.push(u); if (!pierce) break; }
     }
-    return { hits: hits, barrel: barrel };
+    return { hits: hits, prop: prop };
   }
 
   // Everything this shooter could hit from (fx,fy). One entry per lane.
@@ -317,7 +344,7 @@
     for (var d = 0; d < AIM.length; d++) {
       var sc = lineScan(s, fx, fy, AIM[d][0], AIM[d][1], w.range, w.pierce);
       if (sc.hits.length) out.push({ dir: d, kind: 'unit', hits: sc.hits, x: sc.hits[0].x, y: sc.hits[0].y });
-      if (sc.barrel) out.push({ dir: d, kind: 'barrel', hits: [], x: sc.barrel.x, y: sc.barrel.y });
+      if (sc.prop) out.push({ dir: d, kind: sc.prop.kind, hits: [], x: sc.prop.x, y: sc.prop.y });
     }
     return out;
   }
@@ -390,6 +417,12 @@
       var u = unitAt(s, cells[i].x, cells[i].y);
       if (u) hurt(s, u, BLAST_DMG, fxq, 'BLAST');
     }
+    // A blast takes the bulkheads with it, opening lanes mid-fight. The room is
+    // not fixed furniture — you can demolish your way to a shot.
+    for (i = 1; i < cells.length; i++) {
+      var wt = at(s, cells[i].x, cells[i].y);
+      if (wt.t === 'wall') { wt.t = 'floor'; note(fxq, { kind: 'rubble', x: cells[i].x, y: cells[i].y }); }
+    }
     // chain into neighbouring barrels
     if ((depth || 0) < 4) {
       for (i = 1; i < cells.length; i++) {
@@ -443,6 +476,7 @@
     note(fxq, { kind: 'shot', fx: u.x, fy: u.y, tx: target.x, ty: target.y, side: u.side });
 
     if (target.kind === 'barrel') { explode(s, target.x, target.y, fxq, 0); return; }
+    if (target.kind === 'console') { chargeCoolant(s, target.x, target.y, fxq); return; }
 
     var list = target.hits && target.hits.length ? target.hits.slice() : [];
     var first = list[0];
@@ -481,18 +515,22 @@
   }
 
   // Interacting with the two hackable things.
+  // Tripping a console: reached by standing beside it, or by shooting it.
+  function chargeCoolant(s, x, y, fxq) {
+    var t = at(s, x, y);
+    if (t.t !== 'console' || t.spent) return null;
+    t.spent = true;
+    var y2, x2;
+    for (y2 = 0; y2 < H; y2++) for (x2 = 0; x2 < W; x2++) if (at(s, x2, y2).t === 'water') at(s, x2, y2).live = true;
+    electrify(s, fxq);
+    for (y2 = 0; y2 < H; y2++) for (x2 = 0; x2 < W; x2++) if (at(s, x2, y2).t === 'water') at(s, x2, y2).live = false;
+    return 'COOLANT CHARGED';
+  }
+
   function interact(s, u, x, y, fxq) {
     var t = at(s, x, y);
-    if (t.t === 'console' && !t.spent) {
-      t.spent = true;
-      var y2, x2;
-      for (y2 = 0; y2 < H; y2++) for (x2 = 0; x2 < W; x2++) if (at(s, x2, y2).t === 'water') at(s, x2, y2).live = true;
-      electrify(s, fxq);
-      for (y2 = 0; y2 < H; y2++) for (x2 = 0; x2 < W; x2++) if (at(s, x2, y2).t === 'water') at(s, x2, y2).live = false;
-      return 'COOLANT ELECTRIFIED';
-    }
+    if (t.t === 'console' && !t.spent) return chargeCoolant(s, x, y, fxq);
     if (t.t === 'door') {
-      if (!t.open && unitAt(s, x, y)) return null;
       t.open = !t.open;
       note(fxq, { kind: 'door', x: x, y: y });
       return t.open ? 'BLAST DOOR OPEN' : 'BLAST DOOR SEALED';
@@ -851,6 +889,16 @@
   // conservative (it ignores explosion chains, which only ever help).
   function scoreShot(s, u, w, fx, fy, shot) {
     var sc = 0, i;
+    if (shot.kind === 'console') {
+      // same valuation as walking up and using it, minus nothing — it is free
+      for (var cy2 = 0; cy2 < H; cy2++) for (var cx2 = 0; cx2 < W; cx2++) {
+        if (at(s, cx2, cy2).t !== 'water') continue;
+        var cv2 = unitAt(s, cx2, cy2);
+        if (!cv2) continue;
+        sc += cv2.side === 'enemy' ? (cv2.hp <= SHOCK_DMG ? 110 : 30) : -300;
+      }
+      return sc;
+    }
     if (shot.kind === 'barrel') {
       var cells = plus(shot.x, shot.y);
       for (i = 0; i < cells.length; i++) {
@@ -1067,7 +1115,7 @@
   // ============================================================
   // 9. RENDER — everything is drawn from state, every time.
   // ============================================================
-  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp, elFoes, elThreat;
+  var cv, ctx, app, elSector, elTurn, elSquad, elMsg, elActs, elEnd, elOverlay, elPanel, elLive, wrap, elTip, elHelp, elFoes, elThreat, elSectorName;
 
   function neon(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur || 0; }
   // Canvas type. Heavy grotesque for labels, mono for figures — bigger than
@@ -1309,6 +1357,7 @@
       for (k = 0; k < shots.length; k++) {
         var sh = shots[k];
         if (sh.kind === 'barrel') { ringCell(sh.x, sh.y, C.barrel, 2); continue; }
+        if (sh.kind === 'console') { ringCell(sh.x, sh.y, C.console, 2); continue; }
         // mint = you can hit this; pink reticles (below) = it can hit you
         for (var q = 0; q < sh.hits.length; q++) {
           var vt = sh.hits[q];
@@ -1824,7 +1873,17 @@
   //      describe, never decide.
   // ============================================================
   function previewShot(sel, w, shot) {
-    var out = { pct: 100, sure: false, targets: [], allies: 0, kbKill: null, barrel: false };
+    var out = { pct: 100, sure: false, targets: [], allies: 0, kbKill: null, barrel: false, console: false };
+    if (shot.kind === 'console') {
+      out.console = true;
+      out.caught = 0;
+      for (var wy = 0; wy < H; wy++) for (var wx = 0; wx < W; wx++) {
+        if (at(G, wx, wy).t !== 'water') continue;
+        var wv = unitAt(G, wx, wy);
+        if (wv) out.caught += (wv.side === 'enemy' ? 1 : -1);
+      }
+      return out;
+    }
     if (shot.kind === 'barrel') {
       out.barrel = true;
       out.blast = plus(shot.x, shot.y).filter(function (c) { return !!unitAt(G, c.x, c.y); }).length;
@@ -1881,7 +1940,7 @@
   // the HUD actually shows has changed.
   var hudSig = null;
   function syncHud() {
-    var sig = [G.level, G.turn, G.phase, G.ui.selId, G.ui.mode, G.grenades,
+    var sig = [G.level, sectorName(G.level), G.turn, G.phase, G.ui.selId, G.ui.mode, G.grenades,
       G.foe.taken.length,
       G.ui.pending ? G.ui.pending.key : '-',
       alive(G, 'enemy').length].concat(G.squad.map(function (m) {
@@ -1896,6 +1955,7 @@
 
     var foes = alive(G, 'enemy').length;
     elSector.textContent = String(G.level).padStart(2, '0');
+    if (elSectorName) elSectorName.textContent = sectorName(G.level);
     if (elTurn) elTurn.textContent = String(G.turn);
     if (elFoes) elFoes.textContent = String(foes);
     if (elThreat) {
@@ -1993,7 +2053,7 @@
       var w = gun(sel), shots = shotsFrom(G, sel.x, sel.y, w);
       for (i = 0; i < shots.length; i++) {
         var sh = shots[i];
-        var hit = (sh.kind === 'barrel' && sh.x === t.x && sh.y === t.y) ||
+        var hit = (sh.kind !== 'unit' && sh.x === t.x && sh.y === t.y) ||
           (sh.kind === 'unit' && sh.hits.some(function (h) { return h.x === t.x && h.y === t.y; }));
         if (hit) return { kind: 'shot', key: 's:' + t.x + ',' + t.y, shot: sh, w: w, x: t.x, y: t.y };
       }
@@ -2145,8 +2205,8 @@
         console: ['Console', tt.spent ? 'Burned out.' : 'Charges every coolant pool.',
               'A dumb terminal that still answers to anyone standing close.'],
         door: ['Blast door', tt.open
-          ? 'Open. Seal it to cut this lane — nothing moves or shoots through.'
-          : 'Sealed. Blocks movement and every line of fire.',
+          ? 'Open. Seal it to cut every line of fire through this gap.'
+          : 'Sealed. Stops gunfire and sight — but you can still walk through.',
               'Heavy shutter on a dead servo. Someone works it by hand.'],
         wall: ['Bulkhead', 'Stops movement and fire. Gives cover.',
               'Structural plating. Nothing short of the void moves it.'],
@@ -2165,7 +2225,13 @@
       if (it.kind === 'shot') {
         var pv = previewShot(sel, it.w, it.shot);
         a.tag = 'Firing solution';
-        if (pv.barrel) {
+        if (pv.console) {
+          a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+                    { v: String(SHOCK_DMG), label: 'shock', cls: 'big--dmg' }];
+          a.rows.push(['Shot', 'trips the console']);
+          a.rows.push(['Charges', 'every coolant pool']);
+          if (pv.caught <= 0) a.warn.push('Nothing is standing in the coolant.');
+        } else if (pv.barrel) {
           a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
                     { v: String(BLAST_DMG), label: 'blast', cls: 'big--dmg' }];
           a.rows.push(['Weapon', it.w.name]);
@@ -2524,8 +2590,9 @@
     rule(3, '<b>Guns fire eight ways.</b> Diagonals count. Bulkheads stop a shot.') +
     rule(4, '<b>Hostiles telegraph where they move, not what they aim at.</b> The dashed line is the walk they have planned; each one moves, then attacks once.') +
     rule(5, '<b>Read the danger off your own squad.</b> The number over an operative is the <em>total</em> about to land on them from every hostile at once. Red means it kills them.') +
-    rule(6, '<s>Guns roll. The room never does.</s> Shove anything into the void and it is gone.') +
-    rule(7, '<b>Hostiles draft too.</b> Every second sector they reach the crate first and take the best thing in it.') +
+    rule(6, '<s>Guns chip. Shoves kill.</s> A slam into a bulkhead hurts more than most shots, and the void is always fatal. Aim at where things will land.') +
+    rule(7, '<b>The room is destructible.</b> Barrels blow out bulkheads, terminals can be shot from range, and blast doors stop gunfire but not feet.') +
+    rule(8, '<b>Hostiles draft too.</b> Every second sector they reach the crate first and take the best thing in it.') +
     '</div>';
 
   function titleScreen() {
@@ -2788,7 +2855,8 @@
     var picked = offerCount < 3
       ? '<p class="brief__note">They picked the crate over. Two left.</p>' : '';
 
-    var html = '<h2>Sector ' + String(G.level).padStart(2, '0') + ' cleared</h2>' +
+    var html = '<h2>' + sectorName(G.level) + '</h2>' +
+      '<p class="brief__sector">Sector ' + String(G.level).padStart(2, '0') + ' cleared</p>' +
       casualties + stolenLine + jammedLine + picked +
       '<span class="tab">Requisition &mdash; take one</span>' +
       '<div class="rewards">';
@@ -2831,6 +2899,7 @@
     showPanel(
       '<span class="tab tab--foe">Contact lost</span>' +
       '<h2>Squad lost</h2>' +
+      '<p class="brief__sector">Stopped at ' + sectorName(G.level) + '</p>' +
       '<div class="tip__bigs"><span class="big"><b>' + String(G.level).padStart(2, '0') + '</b><i>sector</i></span>' +
       '<span class="big"><b>' + (G.level - 1) + '</b><i>cleared</i></span>' +
       '<span class="big"><b>' + G.foe.taken.length + '</b><i>they drafted</i></span></div>' +
@@ -2887,7 +2956,7 @@
     computeIntents(G);
     autoSelect();
     msg('');
-    say('Sector ' + G.level + '. ' + alive(G, 'enemy').length + ' hostiles. Your move.');
+    say(sectorName(G.level) + '. Sector ' + G.level + ', ' + alive(G, 'enemy').length + ' hostiles. Your move.');
     layout();
 
     var foes = alive(G, 'enemy');
@@ -2899,6 +2968,7 @@
     }
     track('sector_started', Object.assign({
       sector: G.level,
+      sector_name: sectorName(G.level),
       hostiles: foes.length,
       hostile_types: Object.keys(kinds).sort().join(','),
       hazards: Object.keys(hazards).sort().join(',') || 'none',
@@ -2934,6 +3004,7 @@
     elHelp = document.querySelector('[data-help]');
     elFoes = document.querySelector('[data-foes]');
     elThreat = document.querySelector('[data-threat]');
+    elSectorName = document.querySelector('[data-sector-name]');
 
     G = {
       tiles: blankTiles(), units: [], squad: [], grenades: 0,
@@ -2985,6 +3056,8 @@
       canSolve: canSolve, computeIntents: computeIntents, resolveEnemies: resolveEnemies,
       bestPlay: bestPlay, applyPlay: applyPlay, cloneSim: cloneSim,
       alive: alive, at: at, DICE: DICE, WEAPONS: WEAPONS, ENEMIES: ENEMIES,
+      blocksMove: blocksMove, blocksSight: blocksSight, explode: explode,
+      shotsFrom: shotsFrom, unitAt: unitAt, SECTOR_NAMES: SECTOR_NAMES,
       W: W, H: H, TURN_BUDGET: TURN_BUDGET
     };
   }

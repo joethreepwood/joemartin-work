@@ -63,6 +63,19 @@ if you add a stat, add it there rather than at each call site. Requisitions that
 change a stat are capped in `ok()`; unbounded hull would overflow the pip readout
 and flatten the curve.
 
+The room is destructible and shove-first. Guns do 1–3 damage; a slam into a
+bulkhead does `BONK_DMG` (2) and the void is always fatal, so the question each
+turn is where a thing lands rather than whether you can out-damage it. Barrels
+blow out adjacent walls, terminals can be tripped by gunfire as well as by hand
+(`chargeCoolant` is the single entry point for both), and blast doors stop sight
+and gunfire but never movement — `blocksMove` deliberately ignores them. All
+three change connectivity or line of fire mid-fight, so re-run the harness after
+touching any of them.
+
+Sector names come from `SECTOR_NAMES` and are read in order: a run is a silent
+heist told only through the rooms you pass, looping with a pass number once you
+run past the roof.
+
 Difficulty comes from two places. The budget in `buildLevel` scales with the
 sector number, and — every second sector — **the hostiles draft a requisition
 before you do**. Each entry in `REWARDS` therefore has both a `run` (what it does

@@ -28,7 +28,7 @@
       <a class="hud__back" href="./" aria-label="Back to joemartin.work">&larr;</a>
       <span class="hud__title">NULL SECTOR</span>
       <div class="hud__right">
-        <span class="stat"><b data-sector>01</b><i>sector</i></span>
+        <span class="stat stat--wide"><b data-sector>01</b><i data-sector-name>The Approach</i></span>
         <span class="stat stat--foe"><b data-foes>0</b><i>hostile</i></span>
         <span class="stat stat--threat" data-threat hidden><b>0</b><i>drafted</i></span>
         <button class="hud__help" type="button" data-help aria-label="Field manual">?</button>
@@ -54,6 +54,10 @@
     <div class="overlay" data-overlay hidden>
       <div class="panel" data-panel></div>
     </div>
+
+    <!-- CRT pass: scanlines + a soft vignette over the whole app. Purely
+         decorative, never interactive, and disabled for reduced-motion. -->
+    <div class="crt" aria-hidden="true"></div>
 
     <span class="sr-only" aria-live="polite" data-live></span>
     <div class="toosmall">Turn your phone upright, or open this on a bigger screen.</div>
