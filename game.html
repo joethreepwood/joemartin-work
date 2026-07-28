@@ -19,7 +19,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="game.css">
+  <!-- ?v= is a cache-buster: bump it whenever an asset below changes, so the
+       browser fetches the new file instead of a stale cached copy. -->
+  <link rel="stylesheet" href="game.css?v=20260728">
 </head>
 <body>
   <div class="tac-app" data-app>
@@ -64,7 +66,7 @@
     <div class="toosmall">Turn your phone upright, or open this on a bigger screen.</div>
   </div>
 
-  <script src="analytics.js" defer></script>
-  <script src="game.js" defer></script>
+  <script src="analytics.js?v=20260728" defer></script>
+  <script src="game.js?v=20260728" defer></script>
 </body>
 </html>
