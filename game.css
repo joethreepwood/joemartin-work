@@ -79,6 +79,10 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 .hud__right{display:flex;align-items:center;gap:.4rem;margin-left:auto;}
 .hud__title{font-family:var(--heavy);font-size:1.05rem;letter-spacing:.06em;color:#fff;
   white-space:nowrap;}
+/* subtle attribution byline beside the title */
+.hud__mark{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--dim);text-decoration:none;white-space:nowrap;
+  opacity:.55;transition:opacity .15s;}
 .hud__back{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;
   font-size:1rem;color:var(--dim);text-decoration:none;border:2px solid var(--edge);}
 
@@ -151,6 +155,7 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 @media (hover:hover) and (pointer:fine){
   .hud__back:hover{color:var(--ink);background:var(--dim);}
   .hud__help:hover{background:var(--amber);border-color:var(--amber);color:var(--ink);}
+  .hud__mark:hover{opacity:1;color:var(--mint);}
   .btn-act:hover:not(:disabled){background:var(--amber);color:var(--ink);}
   .btn-end:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:4px 4px 0 rgba(0,0,0,.55);}
   .btn-neon:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 rgba(0,0,0,.6);}
@@ -378,6 +383,7 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
 }
 @media(max-width:620px){
   .hud__title{display:none;}
+  .hud__mark{display:none;}   /* room is scarce on a phone; the byline is the first to go */
   .stat{min-width:2.5rem;padding:.1rem .25rem;}
   .stat b{font-size:.92rem;}
   .chip{gap:.4rem;padding:.25rem .4rem;}
