@@ -201,21 +201,20 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
   .crt{animation:crtbloom 9s ease-in-out infinite;}
   .crt::after{animation:crtroll 13s cubic-bezier(.65,0,.35,1) infinite;}
   .crt::before{animation:crtroll2 19s ease-in-out infinite;}
-  .crt-chroma{animation:crtchroma 7s steps(1,end) infinite, crtwarp 3.7s ease-in-out infinite;}
+  /* the chroma/aberration layer stays put — a constant ambient fringe, not a
+     flicker. Only a very slow, gentle sideways breathe keeps it from feeling
+     like a static overlay. */
+  .crt-chroma{animation:crtwarp 22s ease-in-out infinite;}
 }
 @media (prefers-reduced-motion:reduce){ .crt::after,.crt::before,.crt-chroma{display:none;} }
-/* an uneven brightness swell with an occasional flicker dip, off any roll period */
-@keyframes crtbloom{
-  0%,100%{opacity:.9}18%{opacity:.62}35%{opacity:1}
-  47%{opacity:.52}62%{opacity:1}71%{opacity:.44}80%{opacity:.95}}
+/* a gentle, steady brightness swell — no flicker dips */
+@keyframes crtbloom{0%,100%{opacity:.92}50%{opacity:1}}
 /* main band: quick fall in, a slow hover mid-screen, then away */
 @keyframes crtroll{0%{top:-34%}38%{top:24%}52%{top:33%}100%{top:110%}}
 /* second band: a different, longer stumble so the two never sync */
 @keyframes crtroll2{0%{top:-22%}30%{top:8%}48%{top:12%}70%{top:46%}100%{top:112%}}
-/* aberration flicker: jump the edge split's strength on an irregular beat */
-@keyframes crtchroma{0%{opacity:1}23%{opacity:.28}44%{opacity:1}60%{opacity:.4}82%{opacity:.9}}
-/* warp: nudge the whole chroma layer sideways so the split breathes */
-@keyframes crtwarp{0%,100%{transform:translate3d(-6px,0,0)}50%{transform:translate3d(6px,0,0)}}
+/* warp: nudge the whole chroma layer sideways very slowly so the fringe breathes */
+@keyframes crtwarp{0%,100%{transform:translate3d(-2px,0,0)}50%{transform:translate3d(2px,0,0)}}
 
 /* interference burst — an operative just took a hit */
 .crt--hit{animation:crtjolt .26s steps(2,end) 1 !important;
