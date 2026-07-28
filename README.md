@@ -43,6 +43,12 @@ used to be dropped on a random floor tile — which is why a player reported the
 also has to come after the connectivity pass, because that pass demolishes walls
 and can remove the doorway from under the door.
 
+Operatives walk **through** each other but never stop on each other: `reach`
+marks a squadmate's tile `thru`, so it's a stepping stone and not a destination
+(the movement highlight and the solver both skip `thru` entries). This is scoped
+to the player side deliberately — letting hostiles slip past each other would
+remove body-blocking a corridor as a tactic.
+
 Geometry: **feet are 4-way, eyes are 8-way.** Movement uses `DIRS` (orthogonal
 steps, Manhattan `dist`) because 4-way pathing keeps the solver cheap and the
 board readable. Aiming uses `AIM` (all eight directions) and Chebyshev `cheb`,
@@ -52,9 +58,13 @@ squeeze through a corner gap: if both tiles flanking the step block sight, the
 shot stops. Don't mix the two distance functions up; `cheb` is for range,
 falloff, cover and "adjacent", `dist` is for walking.
 
-There are eighteen requisitions, and each one is contested: every entry in
+There are twenty-eight requisitions, and each one is contested: every entry in
 `REWARDS` carries a `run` (what it does for your squad), a `foe` (what it does for
-theirs), a `took` line for the debrief, and a `weight` for how badly they want it.
+theirs), a `took` line for the debrief, a `weight` for how badly they want it, and
+a `scope` saying who ends up holding it. `scope` matters because the weapon crates
+hand the gun to a single operative chosen by a heuristic — `scopeLabel()` and
+`giveWeapon()` both ask `weaponRecipient()` so the card can't name one operative
+and the gun go to another.
 Squad-wide numbers (damage, accuracy, range, soak, revive, extra barrels/voids)
 live on `G.mods`; weapon-shaped ones fold into a weapon **object** once via
 `gunFor()` and are stored on the unit as `wpn`. Everything downstream reads
@@ -62,6 +72,15 @@ live on `G.mods`; weapon-shaped ones fold into a weapon **object** once via
 if you add a stat, add it there rather than at each call site. Requisitions that
 change a stat are capped in `ok()`; unbounded hull would overflow the pip readout
 and flatten the curve.
+
+Two gotchas when adding a requisition. `gunFor()` **early-returns the shared base
+weapon** when none of the mods it knows about are set, so a new weapon-shaped mod
+has to be added to that guard or it will silently do nothing. And perks the *room*
+reads rather than a unit (coolant damage, frag footprint, debris reach, breaching)
+are carried on the state — set them in `buildLevel`, `safeLevel`, `cloneSim` **and**
+`startLevel`. That last one was missed for `shrapnel` and `revive`, which meant the
+field surgeon never brought anyone back in a real game; it only ever worked inside
+the solver, where the state came straight from the builder.
 
 The room is destructible and shove-first. Guns do 1–3 damage; a slam into a
 bulkhead does `BONK_DMG` (2) and the void is always fatal, so the question each
@@ -71,6 +90,25 @@ blow out adjacent walls, terminals can be tripped by gunfire as well as by hand
 and gunfire but never movement — `blocksMove` deliberately ignores them. All
 three change connectivity or line of fire mid-fight, so re-run the harness after
 touching any of them.
+
+**Debris** is the movable piece of furniture. Stand beside a block and spend your
+action to shove it three tiles (five with the Wrecking bar); `shoveDebris` walks
+it one tile at a time like `knockback` does, and hands the remaining momentum on
+to whatever it runs into — a barrel is launched and then detonates where it lands,
+a unit is driven back and takes **1 damage per tile it actually moves**, another
+block carries on. It sinks in coolant and is gone in the void. Shooting a block
+destroys it instead, so gunfire clears a lane and shoving weaponises it.
+
+Two subtleties. A block is both shootable and shoveable, so `resolveIntent` checks
+`interactables` **before** shots — standing right next to one, shoving is what you
+meant. And `interactables` only offers the shove when `shoveGoesSomewhere()` says
+it would achieve something, so a block wedged against a bulkhead falls through to
+being a shot target rather than eating your action for nothing.
+
+Debris is placed **after** the kill-lever step but **before** `connectAll`: after,
+because a block landing on a lever tile would reject the whole level, and before,
+because blocks stop movement, so connectivity repair has to be free to clear one
+out of the only corridor. `connectAll` bulldozes `debris` for exactly that reason.
 
 Sector names come from `SECTOR_NAMES` and are read in order: a run is a silent
 heist told only through the rooms you pass, looping with a pass number once you
@@ -95,7 +133,9 @@ On the interface side, four conventions worth preserving:
   the panel, the on-board markers and the committed result can't disagree.
 - **Hostiles telegraph movement, not aim.** `drawIntents` renders the walk and
   the destination and nothing else — no firing lines, no reticles on targets, no
-  hatched threat cells. Consequence is read off your own squad instead:
+  hatched threat cells. The one exception is the Recon uplink requisition, which
+  exists precisely to break this rule: the aim data is already on the intent
+  (`targetId`, `tx`, `ty`), just not drawn until you buy it. Consequence is read off your own squad instead:
   `threatTo(u)` totals everything about to land on an operative (every attacker,
   blast AoE, plus shove-into-wall impact, and it flags a shove into the void as
   certain death), `drawThreat` puts that single number over the operative, and
@@ -132,15 +172,25 @@ On the interface side, four conventions worth preserving:
   beside the board instead. `placeTip` measures against `.tac-app`, not
   `.stagewrap` — the panel is a sibling of the board, not a child.
 
-To sanity-check the generator after edits, `game.js` exports its internals under
-Node (invisible in browsers), so you can hammer it headlessly:
+To sanity-check the generator after edits, `game.js` exports its internals when
+`module` exists — invisible in a normal browser, since nothing defines it — so you
+can hammer it headlessly:
 
 ```js
+global.window = { matchMedia: null };          // game.js expects a DOM-ish global
 var g = require('./game.js');
-var squad = [{id:'op1',name:'VEX',maxHp:5,move:3,weaponId:'pistol'}];
+var squad = [{id:'op1',name:'VEX',maxHp:5,move:3,weaponId:'pistol',perks:[]}];
 var s = g.generateLevel(5, squad, 1);
 console.log(g.canSolve(s));   // must be true for every shipped level
 ```
+
+Use `buildLevel` rather than `generateLevel` when you want to test composition
+without paying for the solver — it returns `null` for a rejected layout, which is
+normal and retried (the baseline rejection rate is around 0.75%). The same export
+block also exposes `state()` and `redraw()`, which let a page define `var module =
+{ exports: {} }` before loading `game.js` and then stage an exact board to
+screenshot. That's how the debris preview, facing and requisition-card screenshots
+were checked; it's a test seam, not something production can reach.
 
 ## Analytics
 

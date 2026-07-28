@@ -34,6 +34,7 @@
     wall: '#2b2350', wallTop: '#5a4a95', wallEdge: '#6d5aae',
     pit: '#040309', water: '#0a4a63', waterLit: '#00e5ff',
     barrel: '#ff9a2d', console: '#8affc0', door: '#7a5cff',
+    debris: '#8d7f66', debrisTop: '#b9a883',
     ally: '#00e5ff', enemy: '#ff2d95', mint: '#8affc0',
     dim: '#9a90c0', warn: '#ffcf3f', ink: '#08060f'
   };
@@ -57,11 +58,15 @@
   var DICE = {
     live: {
       hit: function (pct) { return liveRng() * 100 < pct; },
-      dmg: function (lo, hi) { return lo + Math.floor(liveRng() * (hi - lo + 1)); }
+      dmg: function (lo, hi) { return lo + Math.floor(liveRng() * (hi - lo + 1)); },
+      resist: function (pct) { return liveRng() * 100 < pct; }
     },
     sim: {
       hit: function (pct, side) { return side === 'enemy' ? true : pct >= 60; },
-      dmg: function (lo, hi, side) { return side === 'enemy' ? hi : lo; }
+      dmg: function (lo, hi, side) { return side === 'enemy' ? hi : lo; },
+      // The solver never banks on a firewall holding, the same way it assumes
+      // every hostile shot connects. Pessimism is the whole point.
+      resist: function () { return false; }
     }
   };
 
@@ -149,6 +154,7 @@
   var BLAST_DMG = 3;   // barrels and sappers
   var SHOCK_DMG = 3;   // standing in electrified coolant
   var BONK_DMG = 2;    // slammed into a wall or another unit — where the damage went
+  var DEBRIS_SHOVE = 3;   // how far a shoved block travels, before the Wrecking bar
 
   // ============================================================
   // 3. STATE + small helpers
@@ -204,16 +210,16 @@
   // hide, not a wall that pens anyone in.
   function blocksMove(s, x, y) {
     var t = at(s, x, y).t;
-    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'pit';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'pit' || t === 'debris';
   }
   function blocksSight(s, x, y) {
     var t = at(s, x, y).t;
     if (t === 'door') return !at(s, x, y).open;
-    return t === 'wall' || t === 'barrel' || t === 'console';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris';
   }
   function blocksKnock(s, x, y) {
     var t = at(s, x, y).t;      // doors let bodies through, same as feet
-    return t === 'wall' || t === 'barrel' || t === 'console';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris';
   }
 
   function unitAt(s, x, y) {
@@ -237,13 +243,16 @@
   // in one place and forgotten in another.
   function gunFor(member, mods) {
     var base = WEAPONS[member.weaponId], m = mods || {};
-    if (!m.dmg && !m.acc && !m.range) return base;      // unmodified: share it
+    // Every perk that lands on the weapon object has to be listed here, or the
+    // early-out silently hands back the unmodified base gun.
+    if (!m.dmg && !m.acc && !m.range && !m.kb && !m.pierce && !m.breach) return base;
     return {
       id: base.id, name: base.name,
       range: Math.max(1, base.range + (m.range || 0)),
       dmgMin: base.dmgMin + (m.dmg || 0), dmgMax: base.dmgMax + (m.dmg || 0),
       acc: Math.min(100, base.acc + (m.acc || 0)), falloff: base.falloff,
-      kb: base.kb, pierce: base.pierce, stun: base.stun, electrify: base.electrify,
+      kb: (base.kb || 0) + (m.kb || 0), pierce: base.pierce || !!m.pierce,
+      stun: base.stun, electrify: base.electrify, breach: !!m.breach,
       blurb: base.blurb
     };
   }
@@ -260,7 +269,7 @@
         return {
           id: u.id, side: u.side, typeId: u.typeId, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp,
           move: u.move, weaponId: u.weaponId, wpn: u.wpn, atk: u.atk,
-          kbResist: u.kbResist, soak: u.soak,
+          kbResist: u.kbResist, soak: u.soak, hackResist: u.hackResist,
           stunned: u.stunned, disabled: u.disabled, armed: u.armed,
           hasMoved: false, hasActed: false, intent: null
         };
@@ -268,6 +277,10 @@
       grenades: s.grenades,
       shrapnel: !!s.shrapnel,
       revive: s.revive || 0,
+      debrisReach: s.debrisReach || 0,
+      shock: s.shock || 0,
+      breach: !!s.breach,
+      bigFrag: !!s.bigFrag,
       sim: true
     };
   }
@@ -290,10 +303,16 @@
         var nx = c.x + dirs[i][0], ny = c.y + dirs[i][1], k = ny * 32 + nx;
         if (!inB(nx, ny) || seen[k]) continue;
         if (blocksMove(s, nx, ny)) continue;
-        var o = unitAt(s, nx, ny);
-        if (o && o !== u) continue;
+        var o = unitAt(s, nx, ny), thru = false;
+        if (o && o !== u) {
+          // Operatives slide past each other — a squadmate is a stepping stone,
+          // never a place to stand. Hostiles still body-block each other, so
+          // penning them into a corridor stays a real tactic.
+          if (u.side === 'player' && o.side === 'player') thru = true;
+          else continue;
+        }
         seen[k] = true;
-        out[k] = { x: nx, y: ny, d: c.d + 1, px: c.x, py: c.y };
+        out[k] = { x: nx, y: ny, d: c.d + 1, px: c.x, py: c.y, thru: thru };
         q.push({ x: nx, y: ny, d: c.d + 1 });
       }
     }
@@ -327,12 +346,12 @@
     [0, 1], [-1, 1], [-1, 0], [-1, -1]
   ];
 
-  // Walk one lane, orthogonal or diagonal. Units and shootable barrels are
+  // Walk one lane, orthogonal or diagonal. Units and shootable props are
   // targets; walls, consoles and shut doors stop the shot.
   // Returns units in the lane plus the first shootable prop that stops the shot:
-  // a barrel (detonates) or an unspent console (a bullet trips it). Consoles and
-  // barrels both blocked sight before; now they are targets in their own right.
-  function lineScan(s, fx, fy, dx, dy, range, pierce) {
+  // a barrel (detonates), a block (breaks apart) or an unspent console (a bullet
+  // trips it). With `breach`, a bulkhead is a target in its own right too.
+  function lineScan(s, fx, fy, dx, dy, range, pierce, breach) {
     var hits = [], prop = null;
     for (var i = 1; i <= range; i++) {
       var x = fx + dx * i, y = fy + dy * i;
@@ -345,7 +364,9 @@
       }
       var tt = at(s, x, y).t;
       if (tt === 'barrel') { prop = { x: x, y: y, kind: 'barrel' }; break; }
+      if (tt === 'debris') { prop = { x: x, y: y, kind: 'debris' }; break; }
       if (tt === 'console' && !at(s, x, y).spent) { prop = { x: x, y: y, kind: 'console' }; break; }
+      if (tt === 'wall' && breach) { prop = { x: x, y: y, kind: 'wall' }; break; }
       if (blocksSight(s, x, y)) break;
       var u = unitAt(s, x, y);
       if (u) { hits.push(u); if (!pierce) break; }
@@ -357,7 +378,7 @@
   function shotsFrom(s, fx, fy, w) {
     var out = [];
     for (var d = 0; d < AIM.length; d++) {
-      var sc = lineScan(s, fx, fy, AIM[d][0], AIM[d][1], w.range, w.pierce);
+      var sc = lineScan(s, fx, fy, AIM[d][0], AIM[d][1], w.range, w.pierce, w.breach);
       if (sc.hits.length) out.push({ dir: d, kind: 'unit', hits: sc.hits, x: sc.hits[0].x, y: sc.hits[0].y });
       if (sc.prop) out.push({ dir: d, kind: sc.prop.kind, hits: [], x: sc.prop.x, y: sc.prop.y });
     }
@@ -450,7 +471,7 @@
     // not fixed furniture — you can demolish your way to a shot.
     for (i = 1; i < cells.length; i++) {
       var wt = at(s, cells[i].x, cells[i].y);
-      if (wt.t === 'wall') { wt.t = 'floor'; note(fxq, { kind: 'rubble', x: cells[i].x, y: cells[i].y }); }
+      if (wt.t === 'wall' || wt.t === 'debris') { wt.t = 'floor'; note(fxq, { kind: 'rubble', x: cells[i].x, y: cells[i].y }); }
     }
     // chain into neighbouring barrels
     if ((depth || 0) < 4) {
@@ -470,7 +491,7 @@
       any = true;
       note(fxq, { kind: 'zap', x: x, y: y });
       var u = unitAt(s, x, y);
-      if (u) hurt(s, u, SHOCK_DMG, fxq, 'SHOCK');
+      if (u) hurt(s, u, shockDmg(s), fxq, 'SHOCK');
     }
     return any;
   }
@@ -496,7 +517,99 @@
         return;
       }
     }
-    if (u.hp > 0 && at(s, u.x, u.y).t === 'water' && at(s, u.x, u.y).live) hurt(s, u, SHOCK_DMG, fxq, 'SHOCK');
+    if (u.hp > 0 && at(s, u.x, u.y).t === 'water' && at(s, u.x, u.y).live) hurt(s, u, shockDmg(s), fxq, 'SHOCK');
+  }
+
+  // Squad perks that change the room are carried on the state, not looked up
+  // from G, so the solver's clones reason about the same numbers.
+  // Which way a token points. Cosmetic only — nothing in the rules reads it,
+  // guns still fire in all eight directions. It just gives the board a sense of
+  // which way everyone was last headed.
+  function faceToward(u, x, y) {
+    var dx = Math.sign(x - u.x), dy = Math.sign(y - u.y);
+    if (dx || dy) u.facing = { dx: dx, dy: dy };
+  }
+  // A path can dog-leg, so face along its last step rather than at the
+  // destination as the crow flies.
+  function faceAlong(u, path, fx, fy) {
+    if (path && path.length > 1) {
+      var a = path[path.length - 2], b = path[path.length - 1];
+      var dx = Math.sign(b.x - a.x), dy = Math.sign(b.y - a.y);
+      if (dx || dy) { u.facing = { dx: dx, dy: dy }; return; }
+    }
+    faceToward(u, fx, fy);
+  }
+
+  function debrisReach(s) { return DEBRIS_SHOVE + (s.debrisReach || 0); }
+  function shockDmg(s) { return SHOCK_DMG + ((s && s.shock) || 0); }
+
+  // Shove a debris block. Deterministic, like every other environmental play.
+  // Momentum is the interesting part: whatever the block runs into inherits
+  // whatever travel is left, so a block is a way of throwing a barrel across
+  // the room or crushing something into a wall you could not otherwise reach.
+  function shoveDebris(s, x, y, dx, dy, n, fxq, depth) {
+    at(s, x, y).t = 'floor';                         // the block leaves its tile
+
+    // ---- pass one: walk it, and find out what stops it ----
+    var px = x, py = y;                              // last tile the block held
+    var hit = null, left = 0, gone = false, i;
+    for (i = 1; i <= n; i++) {
+      var nx = x + dx * i, ny = y + dy * i;
+      if (!inB(nx, ny)) break;                       // rings off the frame
+      var t = at(s, nx, ny);
+
+      if (t.t === 'barrel' || t.t === 'debris' || unitAt(s, nx, ny)) {
+        hit = { x: nx, y: ny, what: unitAt(s, nx, ny) ? 'unit' : t.t };
+        left = n - i;
+        break;
+      }
+      if (blocksKnock(s, nx, ny)) break;             // bulkhead or console
+      if (t.t === 'door' && !t.open) break;          // a sealed shutter holds
+
+      px = nx; py = ny;
+      note(fxq, { kind: 'dust', x: nx, y: ny });
+      if (t.t === 'pit') { gone = true; break; }     // tumbles into the void
+      if (t.t === 'water') { gone = true; break; }   // sinks in the coolant
+    }
+
+    // ---- pass two: set it down, then let the collision play out ----
+    // The block is planted first on purpose, so a barrel it set off can
+    // pulverise it in the blast rather than the blast landing on empty floor.
+    if (gone) note(fxq, { kind: 'rubble', x: px, y: py });
+    else { at(s, px, py).t = 'debris'; note(fxq, { kind: 'rubble', x: px, y: py }); }
+
+    if (!hit) return;
+
+    // A barrel takes the rest of the momentum and goes off wherever it lands.
+    if (hit.what === 'barrel') {
+      at(s, hit.x, hit.y).t = 'floor';
+      var bx = hit.x, by = hit.y, j;
+      for (j = 1; j <= left; j++) {
+        var qx = hit.x + dx * j, qy = hit.y + dy * j;
+        if (!inB(qx, qy) || blocksKnock(s, qx, qy) || unitAt(s, qx, qy)) break;
+        bx = qx; by = qy;
+        note(fxq, { kind: 'dust', x: qx, y: qy });
+        if (at(s, qx, qy).t === 'pit' || at(s, qx, qy).t === 'water') break;
+      }
+      explode(s, bx, by, fxq, 0);
+      return;
+    }
+
+    // Another block passes the momentum along.
+    if (hit.what === 'debris') {
+      if ((depth || 0) < 3 && left > 0) shoveDebris(s, hit.x, hit.y, dx, dy, left, fxq, (depth || 0) + 1);
+      return;
+    }
+
+    // A body takes the rest of the momentum, and one damage per tile it is
+    // driven back. No dice — the room never rolls.
+    var o = unitAt(s, hit.x, hit.y);
+    if (o && left > 0) {
+      var ox = o.x, oy = o.y;
+      knockback(s, o, dx, dy, left, fxq);
+      var moved = Math.abs(o.x - ox) + Math.abs(o.y - oy);
+      if (o.hp > 0 && moved) hurt(s, o, moved, fxq, 'CRUSH');
+    }
   }
 
   // Resolve one shot. Shared by the player, the enemies and the solver.
@@ -507,6 +620,20 @@
 
     if (target.kind === 'barrel') { explode(s, target.x, target.y, fxq, 0); return; }
     if (target.kind === 'console') { chargeCoolant(s, target.x, target.y, fxq); return; }
+    // Gunfire breaks a block apart rather than moving it — shooting clears the
+    // lane, shoving weaponises it. Two different jobs for the same rubble.
+    if (target.kind === 'debris') {
+      at(s, target.x, target.y).t = 'floor';
+      note(fxq, { kind: 'rubble', x: target.x, y: target.y });
+      return;
+    }
+    // Breaching rounds: the bulkhead the shot stops against comes down, so a gun
+    // can open its own firing lane.
+    if (target.kind === 'wall') {
+      at(s, target.x, target.y).t = 'floor';
+      note(fxq, { kind: 'rubble', x: target.x, y: target.y });
+      return;
+    }
 
     var list = target.hits && target.hits.length ? target.hits.slice() : [];
     var first = list[0];
@@ -526,8 +653,9 @@
 
   function throwGrenade(s, u, tx, ty, dice, fxq) {
     note(fxq, { kind: 'lob', fx: u.x, fy: u.y, tx: tx, ty: ty });
-    note(fxq, { kind: 'boom', x: tx, y: ty });
-    var cells = plus(tx, ty), i, victims = [];
+    note(fxq, { kind: 'boom', x: tx, y: ty, wide: !!s.bigFrag });
+    // A shaped charge takes the corners too, same footprint as a barrel.
+    var cells = s.bigFrag ? blob(tx, ty) : plus(tx, ty), i, victims = [];
     for (i = 0; i < cells.length; i++) {
       var v = unitAt(s, cells[i].x, cells[i].y);
       if (v) victims.push(v);
@@ -557,9 +685,25 @@
     return 'COOLANT CHARGED';
   }
 
+  // Would shoving this block achieve anything? True if the tile behind it is
+  // enterable, or holds something the momentum can be handed on to.
+  function shoveGoesSomewhere(s, u, x, y) {
+    var nx = x + Math.sign(x - u.x), ny = y + Math.sign(y - u.y);
+    if (!inB(nx, ny)) return false;
+    var t = at(s, nx, ny);
+    if (t.t === 'barrel' || t.t === 'debris' || unitAt(s, nx, ny)) return true;
+    if (blocksKnock(s, nx, ny)) return false;
+    if (t.t === 'door' && !t.open) return false;
+    return true;
+  }
+
   function interact(s, u, x, y, fxq) {
     var t = at(s, x, y);
     if (t.t === 'console' && !t.spent) return chargeCoolant(s, x, y, fxq);
+    if (t.t === 'debris') {
+      shoveDebris(s, x, y, Math.sign(x - u.x), Math.sign(y - u.y), debrisReach(s), fxq, 0);
+      return 'DEBRIS SHOVED';
+    }
     if (t.t === 'door') {
       t.open = !t.open;
       note(fxq, { kind: 'door', x: x, y: y });
@@ -575,6 +719,10 @@
       var t = at(s, x, y);
       if (t.t === 'console' && !t.spent) out.push({ x: x, y: y, kind: 'console' });
       if (t.t === 'door') out.push({ x: x, y: y, kind: 'door' });
+      // Only offer the shove if it would actually do something. A block wedged
+      // against a bulkhead is not shoveable, so clicking it falls through to
+      // shooting it instead of burning the action on nothing.
+      if (t.t === 'debris' && shoveGoesSomewhere(s, u, x, y)) out.push({ x: x, y: y, kind: 'debris' });
     }
     return out;
   }
@@ -690,9 +838,10 @@
         for (var p = 0; p < it.path.length; p++) {
           var st = it.path[p];
           if (!passable(s, st.x, st.y)) break;
+          faceToward(e, st.x, st.y);
           e.x = st.x; e.y = st.y;
           note(fxq, { kind: 'step', id: e.id, x: st.x, y: st.y });
-          if (at(s, st.x, st.y).t === 'water' && at(s, st.x, st.y).live) hurt(s, e, SHOCK_DMG, fxq, 'SHOCK');
+          if (at(s, st.x, st.y).t === 'water' && at(s, st.x, st.y).live) hurt(s, e, shockDmg(s), fxq, 'SHOCK');
           if (e.hp <= 0) break;
         }
       }
@@ -708,7 +857,10 @@
             var ln = lineScan(s, e.x, e.y, AIM[d][0], AIM[d][1], e.atk.range, false);
             if (ln.hits.length && ln.hits[0].id === tgt.id) {
               fire(s, e, e.atk, { kind: 'unit', x: tgt.x, y: tgt.y, hits: [tgt] }, dice, fxq);
-              if (e.atk.disable && tgt.hp > 0) { tgt.disabled = 1; note(fxq, { kind: 'hack', x: tgt.x, y: tgt.y }); }
+              if (e.atk.disable && tgt.hp > 0) {
+                if (dice.resist(tgt.hackResist || 0)) note(fxq, { kind: 'firewall', x: tgt.x, y: tgt.y });
+                else { tgt.disabled = 1; note(fxq, { kind: 'hack', x: tgt.x, y: tgt.y }); }
+              }
               break;
             }
           }
@@ -746,7 +898,7 @@
       while ((cx !== a.x || cy !== a.y) && steps++ < 20) {
         if (cx !== a.x) cx += Math.sign(a.x - cx); else cy += Math.sign(a.y - cy);
         var t = at(s, cx, cy);
-        if (t.t === 'wall' || t.t === 'pit' || t.t === 'barrel' || t.t === 'console') s.tiles[cy][cx] = tile('floor');
+        if (t.t === 'wall' || t.t === 'pit' || t.t === 'barrel' || t.t === 'console' || t.t === 'debris') s.tiles[cy][cx] = tile('floor');
         if (t.t === 'door') t.open = true;
       }
     }
@@ -782,8 +934,9 @@
         x: sl.x, y: sl.y, hp: squad[i].maxHp, maxHp: squad[i].maxHp,
         move: squad[i].move, weaponId: squad[i].weaponId,
         wpn: gunFor(squad[i], mods), soak: mods.soak || 0,
-        kbResist: mods.noShove ? 99 : 0,
-        hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null
+        kbResist: mods.noShove ? 99 : 0, hackResist: mods.hackResist || 0,
+        hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null,
+        facing: { dx: 0, dy: -1 }
       });
     }
 
@@ -800,6 +953,12 @@
       (fp.acc ? 1 : 0) + (fp.sight ? 1 : 0) + (fp.jolt ? 1 : 0) + (fp.shrapnel ? 1 : 0);
     s.shrapnel = !!fp.shrapnel;
     s.revive = mods.revive || 0;
+    // Squad perks the room itself has to know about, carried on the state so the
+    // solver's clones play by the same rules.
+    s.debrisReach = mods.debrisReach || 0;
+    s.shock = mods.shock || 0;
+    s.breach = !!mods.breach;
+    s.bigFrag = !!mods.bigFrag;
 
     var pool = Object.keys(ENEMIES).filter(function (k) { return ENEMIES[k].unlock <= level; });
     var budget = 1.5 + level * 2.2 + squad.length * 0.5 - drafted * 0.6;
@@ -823,7 +982,8 @@
         hp: def.hp + fp.hp, maxHp: def.hp + fp.hp,
         move: def.move + fp.move, atk: atk, soak: fp.soak,
         kbResist: (def.kbResist || 0) + fp.brace,
-        hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null
+        hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null,
+        facing: { dx: 0, dy: 1 }
       });
       budget -= def.cost + fp.hp * 0.5 + fp.dmg * 0.5; placed++;
     }
@@ -835,7 +995,8 @@
     // to fight in rather than just rooms with more hostiles in them.
     var nPits = 1 + Math.floor(rng() * 2) + Math.floor(level / 4) + (mods.pits || 0);
     var nBarrels = 1 + Math.floor(rng() * 2) + Math.floor(level / 3) + (mods.barrels || 0);
-    nPits = Math.min(5, nPits); nBarrels = Math.min(5, nBarrels);
+    var nDebris = 1 + Math.floor(level / 4) + (mods.debris || 0);
+    nPits = Math.min(5, nPits); nBarrels = Math.min(5, nBarrels); nDebris = Math.min(4, nDebris);
     function freeSpot(minY, maxY) {
       for (var a = 0; a < 60; a++) {
         var fx2 = Math.floor(rng() * W), fy2 = minY + Math.floor(rng() * (maxY - minY + 1));
@@ -903,6 +1064,13 @@
     }
     if (!lever) return null;
 
+    // Blocks go down after the kill-lever step but before connectAll. After,
+    // because a block sitting on a lever tile would reject the whole level;
+    // before, because they stop movement, so if one lands in the only corridor
+    // connectivity repair is allowed to clear it. (Doors are the opposite case —
+    // those have to wait until after the carving.)
+    for (i = 0; i < nDebris; i++) { var dbr = freeSpot(1, H - 3); if (dbr) s.tiles[dbr.y][dbr.x] = tile('debris'); }
+
     // --- connectivity: squad and every enemy must share one region ---
     var must = alive(s, 'player').map(function (o) { return { x: o.x, y: o.y }; })
       .concat(enemies.map(function (o) { return { x: o.x, y: o.y }; }));
@@ -926,7 +1094,7 @@
       }
       // Two doors from sector 6 when the room offers two real doorways, so the
       // map has more than one lane you can shut.
-      var nDoors = (level >= 6 && gaps.length > 3) ? 2 : 1;
+      var nDoors = ((level >= 6 && gaps.length > 3) ? 2 : 1) + (mods.doors || 0);
       for (i = 0; i < nDoors && gaps.length; i++) {
         var di = Math.floor(rng() * gaps.length), dp = gaps[di];
         gaps.splice(di, 1);
@@ -956,7 +1124,7 @@
         if (at(s, cx2, cy2).t !== 'water') continue;
         var cv2 = unitAt(s, cx2, cy2);
         if (!cv2) continue;
-        sc += cv2.side === 'enemy' ? (cv2.hp <= SHOCK_DMG ? 110 : 30) : -300;
+        sc += cv2.side === 'enemy' ? (cv2.hp <= shockDmg(s) ? 110 : 30) : -300;
       }
       return sc;
     }
@@ -1034,11 +1202,12 @@
       if (at(s, wx0, wy0).t !== 'water') continue;
       var wu = unitAt(s, wx0, wy0);
       if (!wu) continue;
-      liveWater += wu.side === 'enemy' ? (wu.hp <= SHOCK_DMG ? 110 : 30) : -300;
+      liveWater += wu.side === 'enemy' ? (wu.hp <= shockDmg(s) ? 110 : 30) : -300;
     }
 
     for (i = 0; i < keys.length; i++) {
       var c = rm[keys[i]];
+      if (c.thru) continue;                         // walked through, not stood on
       var base = -c.d * 0.4;                        // mild preference for staying put
       if (threat[c.y * 32 + c.x]) base -= 45;       // don't stand where you're about to be shot
       if (at(s, c.x, c.y).t === 'water') base -= 4;
@@ -1053,7 +1222,7 @@
         for (var g = 0; g < gCand.length; g++) {
           var gt = gCand[g];
           if (cheb(c.x, c.y, gt.x, gt.y) > GRENADE.range) continue;
-          var cells = plus(gt.x, gt.y), gs = base - 8, hitAny = false;
+          var cells = (s.bigFrag ? blob : plus)(gt.x, gt.y), gs = base - 8, hitAny = false;
           for (var q = 0; q < cells.length; q++) {
             var v = unitAt(s, cells[q].x, cells[q].y);
             if (!v) continue;
@@ -1084,7 +1253,7 @@
       var rm = reach(s, u, u.move), path = pathFrom(rm, play.mx, play.my);
       u.x = play.mx; u.y = play.my; u.hasMoved = true;
       if (fxq) note(fxq, { kind: 'walk', id: u.id, path: path });
-      if (at(s, u.x, u.y).t === 'water' && at(s, u.x, u.y).live) hurt(s, u, SHOCK_DMG, fxq, 'SHOCK');
+      if (at(s, u.x, u.y).t === 'water' && at(s, u.x, u.y).live) hurt(s, u, shockDmg(s), fxq, 'SHOCK');
     }
     if (!play.act || u.hp <= 0) return;
     if (play.act.kind === 'shot') fire(s, u, gun(u), play.act.shot, dice, fxq);
@@ -1124,7 +1293,9 @@
     fp = { dmg: fp.dmg || 0, hp: fp.hp || 0, move: fp.move || 0, kb: fp.kb || 0,
            soak: fp.soak || 0, brace: fp.brace || 0, jolt: !!fp.jolt, shrapnel: !!fp.shrapnel };
     var s = { tiles: blankTiles(), units: [], grenades: grenades, seed: 0, level: level,
-              shrapnel: !!fp.shrapnel, revive: mods.revive || 0 };
+              shrapnel: !!fp.shrapnel, revive: mods.revive || 0,
+              debrisReach: mods.debrisReach || 0, shock: mods.shock || 0,
+              breach: !!mods.breach, bigFrag: !!mods.bigFrag };
     var n = Math.min(3, 1 + Math.ceil(level / 4)), i;
     for (i = 0; i < squad.length; i++) {
       s.units.push({
@@ -1132,8 +1303,9 @@
         x: 2 + i * 2, y: H - 1, hp: squad[i].maxHp, maxHp: squad[i].maxHp,
         move: squad[i].move, weaponId: squad[i].weaponId,
         wpn: gunFor(squad[i], mods), soak: mods.soak || 0,
-        kbResist: mods.noShove ? 99 : 0,
-        hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null
+        kbResist: mods.noShove ? 99 : 0, hackResist: mods.hackResist || 0,
+        hasMoved: false, hasActed: false, stunned: 0, disabled: 0, intent: null,
+        facing: { dx: 0, dy: -1 }
       });
     }
     for (i = 0; i < n; i++) {
@@ -1147,7 +1319,8 @@
           acc: 100, kb: fp.kb, disable: fp.jolt
         },
         soak: fp.soak, kbResist: fp.brace,
-        hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null
+        hasMoved: false, hasActed: false, stunned: 0, armed: false, intent: null,
+        facing: { dx: 0, dy: 1 }
       });
       if (ey - 1 >= 0) s.tiles[ey - 1][ex] = tile('pit');
     }
@@ -1313,6 +1486,28 @@
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('!', cx(x), cy(y) + 1);
 
+    } else if (t.t === 'debris') {
+      // A slab of wreckage: square, off-centre, hatched. Deliberately heavy and
+      // deliberately not round, so it never reads as a barrel.
+      var dw = T * .62, dh = T * .58, dx0 = cx(x) - dw / 2 + T * .03, dy0 = cy(y) - dh / 2;
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(dx0 + T * .05, dy0 + T * .07, dw, dh);
+      ctx.fillStyle = 'rgba(141,127,102,.30)';
+      ctx.fillRect(dx0, dy0, dw, dh);
+      ctx.strokeStyle = C.debrisTop; ctx.lineWidth = 2;
+      ctx.strokeRect(dx0, dy0, dw, dh);
+      // cross-hatch, clipped to the slab
+      ctx.save();
+      ctx.beginPath(); ctx.rect(dx0, dy0, dw, dh); ctx.clip();
+      ctx.strokeStyle = 'rgba(185,168,131,.55)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (i = -2; i <= 4; i++) {
+        ctx.moveTo(dx0 + i * T * .18, dy0);
+        ctx.lineTo(dx0 + i * T * .18 + dh, dy0 + dh);
+      }
+      ctx.stroke();
+      ctx.restore();
+
     } else if (t.t === 'console') {
       var col = t.spent ? '#4a4468' : C.console;
       // a terminal: housing, screen, scanlines
@@ -1384,7 +1579,7 @@
       }
       var hv = G.ui.hover;
       if (hv && cheb(u.x, u.y, hv.x, hv.y) <= GRENADE.range) {
-        var cells = plus(hv.x, hv.y);
+        var cells = (G.bigFrag ? blob : plus)(hv.x, hv.y);
         for (k = 0; k < cells.length; k++) { fillCell(cells[k].x, cells[k].y, 'rgba(255,207,63,.3)'); ringCell(cells[k].x, cells[k].y, C.warn, 2); }
       }
       return;
@@ -1396,6 +1591,7 @@
       for (k = 0; k < keys.length; k++) {
         var c2 = rm[keys[k]];
         if (c2.x === u.x && c2.y === u.y) continue;
+        if (c2.thru) continue;                      // a squadmate's tile is not a destination
         fillCell(c2.x, c2.y, 'rgba(0,229,255,.13)');
         ringCell(c2.x, c2.y, 'rgba(0,229,255,.38)', 2);
       }
@@ -1539,13 +1735,25 @@
     }
 
     if (p.kind === 'grenade') {
-      var cells = plus(p.x, p.y);
+      var cells = (G.bigFrag ? blob : plus)(p.x, p.y);
       for (var i = 0; i < cells.length; i++) { fillCell(cells[i].x, cells[i].y, 'rgba(255,207,63,.34)'); ringCell(cells[i].x, cells[i].y, C.warn, 2); }
       confirmBadge(p.x, p.y, C.warn);
       return;
     }
 
     if (p.kind === 'interact') {
+      if (p.ikind === 'debris') {
+        // draw the block's route and mark whatever stops it
+        var dv = previewDebris(sel, p.x, p.y), q2;
+        for (q2 = 0; q2 < dv.path.length; q2++) {
+          fillCell(dv.path[q2].x, dv.path[q2].y, 'rgba(185,168,131,.22)');
+          ringCell(dv.path[q2].x, dv.path[q2].y, C.debrisTop, 2);
+        }
+        if (dv.hit) { fillCell(dv.hit.x, dv.hit.y, 'rgba(255,45,149,.20)'); ringCell(dv.hit.x, dv.hit.y, C.enemy, 3); }
+        ringCell(p.x, p.y, C.debrisTop, 3);
+        confirmBadge(p.x, p.y, C.debrisTop);
+        return;
+      }
       ringCell(p.x, p.y, C.console, 3);
       confirmBadge(p.x, p.y, C.console);
       return;
@@ -1630,6 +1838,19 @@
         ctx.strokeStyle = 'rgba(255,45,149,.6)'; ctx.lineWidth = 1;
         ctx.strokeRect(d2.x * T + 4.5, d2.y * T + 4.5, T - 9, T - 9);
       }
+      // Recon uplink: hostiles normally advertise their route and nothing else.
+      // With the uplink you also see the lane they intend to fire down, from
+      // wherever they are going to be standing.
+      if (G.mods && G.mods.recon && it.kind === 'attack' && it.targetId) {
+        var from = it.dest || { x: e.x, y: e.y };
+        ctx.strokeStyle = 'rgba(138,255,192,.85)'; ctx.lineWidth = 2;
+        ctx.setLineDash([2, 5]); neon(C.mint, 8);
+        ctx.beginPath();
+        ctx.moveTo(cx(from.x), cy(from.y));
+        ctx.lineTo(cx(it.tx), cy(it.ty));
+        ctx.stroke();
+        ctx.setLineDash([]); noNeon();
+      }
     }
   }
 
@@ -1690,6 +1911,15 @@
     neon(col, 12);
     ctx.strokeStyle = col; ctx.lineWidth = 2.2;
     ctx.fillStyle = u.side === 'player' ? 'rgba(0,229,255,.20)' : 'rgba(255,45,149,.20)';
+
+    // Turn the glyph to face wherever this unit last walked. Each shape is drawn
+    // at its own rest angle — the chevron points up, the drone's triangle points
+    // down — so rotate by the difference rather than by the facing outright.
+    var f = u.facing || { dx: 0, dy: -1 };
+    var restDy = u.typeId === 'grunt' ? 1 : -1;
+    var spin = Math.atan2(f.dy, f.dx) - Math.atan2(restDy, 0);
+    ctx.save();
+    ctx.translate(px, py); ctx.rotate(spin); ctx.translate(-px, -py);
     ctx.beginPath();
 
     if (u.side === 'player') {                      // operative: upward chevron
@@ -1717,6 +1947,7 @@
     }
     if (u.typeId === 'hacker') ctx.stroke();
     else { ctx.fill(); ctx.stroke(); }
+    ctx.restore();                                  // everything after this stays upright
     noNeon();
 
     // armed sapper pulses
@@ -2031,6 +2262,18 @@
                             len: 0.42, color: C.wallTop, t: 0, dur: 360, delay: delay });
           }
           break;
+        // grit thrown up along a shoved block's route — cheap, but it sells the
+        // weight of the thing sliding across the deck
+        case 'dust':
+          for (var du = 0; du < 3; du++) {
+            G.shards.push({ x: f.x, y: f.y, a: (Math.PI * 2 / 3) * du + 1.1,
+                            len: 0.26, color: C.debris, t: 0, dur: 280, delay: delay });
+          }
+          delay += 45; break;
+        case 'firewall':
+          G.fx.push({ x: f.x, y: f.y, text: 'BLOCKED', color: C.mint, t: 0, dur: 820, delay: delay });
+          G.rings.push({ x: f.x, y: f.y, color: C.mint, t: 0, dur: 420, delay: delay });
+          delay += 80; break;
         case 'zap':
           G.rings.push({ x: f.x, y: f.y, color: C.waterLit, t: 0, dur: 460, delay: delay }); break;
         case 'fall':
@@ -2063,8 +2306,38 @@
   //      the real outcome still comes from fire(), so this only ever needs to
   //      describe, never decide.
   // ============================================================
+  // Dry-run a debris shove: how far the block gets, what stops it, and whether
+  // anything of yours is standing in the way. Mirrors shoveDebris exactly, so
+  // the preview cannot promise something the shove will not do.
+  function previewDebris(sel, x, y) {
+    var dx = Math.sign(x - sel.x), dy = Math.sign(y - sel.y);
+    var n = debrisReach(G), path = [], out = { tiles: 0, what: 'the frame', path: path, mine: false, crush: 0 };
+    for (var i = 1; i <= n; i++) {
+      var nx = x + dx * i, ny = y + dy * i;
+      if (!inB(nx, ny)) break;
+      var t = at(G, nx, ny), o = unitAt(G, nx, ny);
+      if (o) {
+        out.what = (o.side === 'player' ? 'your ' : '') + (o.side === 'player' ? o.name : ENEMIES[o.typeId].name);
+        out.mine = o.side === 'player';
+        out.crush = Math.max(0, n - i);
+        out.hit = { x: nx, y: ny };
+        break;
+      }
+      if (t.t === 'barrel') { out.what = 'a barrel — it is launched, then detonates'; out.hit = { x: nx, y: ny }; break; }
+      if (t.t === 'debris') { out.what = 'another block, which carries on'; out.hit = { x: nx, y: ny }; break; }
+      if (t.t === 'wall') { out.what = 'a bulkhead'; break; }
+      if (t.t === 'console') { out.what = 'a console'; break; }
+      if (t.t === 'door' && !t.open) { out.what = 'a sealed door'; break; }
+      path.push({ x: nx, y: ny });
+      out.tiles++;
+      if (t.t === 'pit') { out.what = 'the void — the block is gone'; out.gone = true; break; }
+      if (t.t === 'water') { out.what = 'coolant — the block sinks'; out.gone = true; break; }
+    }
+    return out;
+  }
+
   function previewShot(sel, w, shot) {
-    var out = { pct: 100, sure: false, targets: [], allies: 0, kbKill: null, barrel: false, console: false };
+    var out = { pct: 100, sure: false, targets: [], allies: 0, kbKill: null, barrel: false, console: false, prop: null };
     if (shot.kind === 'console') {
       out.console = true;
       out.caught = 0;
@@ -2080,6 +2353,7 @@
       out.blast = blob(shot.x, shot.y).filter(function (c) { return !!unitAt(G, c.x, c.y); }).length;
       return out;
     }
+    if (shot.kind === 'debris' || shot.kind === 'wall') { out.prop = shot.kind; return out; }
     var dx = Math.sign(shot.x - sel.x), dy = Math.sign(shot.y - sel.y);
     for (var i = 0; i < shot.hits.length; i++) {
       var t = shot.hits[i];
@@ -2232,18 +2506,21 @@
       return { kind: 'grenade', key: 'g:' + t.x + ',' + t.y, x: t.x, y: t.y };
     }
     if (!sel.hasActed) {
+      // Interactables are checked first, because a block is both shootable and
+      // shoveable: standing right next to one, shoving is what you meant. If you
+      // want it broken up instead, shoot it from further back.
+      var ints = interactables(G, sel);
+      for (i = 0; i < ints.length; i++) {
+        if (ints[i].x === t.x && ints[i].y === t.y) {
+          return { kind: 'interact', key: 'i:' + t.x + ',' + t.y, x: t.x, y: t.y, ikind: ints[i].kind };
+        }
+      }
       var w = gun(sel), shots = shotsFrom(G, sel.x, sel.y, w);
       for (i = 0; i < shots.length; i++) {
         var sh = shots[i];
         var hit = (sh.kind !== 'unit' && sh.x === t.x && sh.y === t.y) ||
           (sh.kind === 'unit' && sh.hits.some(function (h) { return h.x === t.x && h.y === t.y; }));
         if (hit) return { kind: 'shot', key: 's:' + t.x + ',' + t.y, shot: sh, w: w, x: t.x, y: t.y };
-      }
-      var ints = interactables(G, sel);
-      for (i = 0; i < ints.length; i++) {
-        if (ints[i].x === t.x && ints[i].y === t.y) {
-          return { kind: 'interact', key: 'i:' + t.x + ',' + t.y, x: t.x, y: t.y, ikind: ints[i].kind };
-        }
       }
     }
     if (!sel.hasMoved && !unitAt(G, t.x, t.y) && !blocksMove(G, t.x, t.y)) {
@@ -2380,8 +2657,10 @@
               'A hole in the deck plating. It does not have a bottom.'],
         barrel: ['Fuel barrel', BLAST_DMG + ' damage to every touching tile. Chains.',
               'Volatile promethium. One spark and the whole cell goes.'],
-        water: ['Coolant', 'Harmless until charged — then ' + SHOCK_DMG + ' damage.',
+        water: ['Coolant', 'Harmless until charged — then ' + shockDmg(G) + ' damage.',
               'Reactor runoff. Fine to wade through, until it is live.'],
+        debris: ['Debris', 'Stand beside it and shove it ' + debrisReach(G) + '. Or shoot it apart.',
+              'Somebody else’s bad day, piled up and left where it fell.'],
         console: ['Console', tt.spent ? 'Burned out.' : 'Charges every coolant pool.',
               'A dumb terminal that still answers to anyone standing close.'],
         door: ['Blast door', tt.open
@@ -2407,15 +2686,20 @@
         a.tag = 'Firing solution';
         if (pv.console) {
           a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' },
-                    { v: String(SHOCK_DMG), label: 'shock', cls: 'big--dmg' }];
+                    { v: String(shockDmg(G)), label: 'shock', cls: 'big--dmg' }];
           a.rows.push(['Shot', 'trips the console']);
           a.rows.push(['Charges', 'every coolant pool']);
           if (pv.caught <= 0) a.warn.push('Nothing is standing in the coolant.');
         } else if (pv.barrel) {
-          a.bigs = [{ v: 'SURE', label: 'to hit', cls: 'big--sure' },
+          a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' },
                     { v: String(BLAST_DMG), label: 'blast', cls: 'big--dmg' }];
           a.rows.push(['Weapon', it.w.name]);
           a.rows.push(['Caught', pv.blast + ' unit' + (pv.blast === 1 ? '' : 's')]);
+        } else if (pv.prop) {
+          a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' }];
+          a.rows.push(['Weapon', it.w.name]);
+          a.rows.push(['Shot', pv.prop === 'wall' ? 'brings the bulkhead down' : 'breaks the block apart']);
+          a.rows.push(['Opens', 'a new lane through here']);
         } else {
           a.bigs = [{ v: pv.pct + '%', label: 'to hit', cls: pv.sure ? 'big--sure' : 'big--hit' },
                     { v: it.w.dmgMin + '–' + it.w.dmgMax, label: 'damage', cls: 'big--dmg' }];
@@ -2439,13 +2723,23 @@
         a.tag = 'Frag';
         a.bigs = [{ v: '100%', label: 'to hit', cls: 'big--sure' },
                   { v: GRENADE.dmgMin + '–' + GRENADE.dmgMax, label: 'damage', cls: 'big--dmg' }];
-        var caught = plus(it.x, it.y).map(function (c) { return unitAt(G, c.x, c.y); }).filter(Boolean);
+        var caught = (G.bigFrag ? blob : plus)(it.x, it.y).map(function (c) { return unitAt(G, c.x, c.y); }).filter(Boolean);
         var mine = caught.filter(function (v2) { return v2.side === 'player'; }).length;
-        a.rows.push(['Area', 'cross, 5 tiles']);
+        a.rows.push(['Area', G.bigFrag ? 'all 9 tiles' : 'cross, 5 tiles']);
         a.rows.push(['Caught', caught.length + ' unit' + (caught.length === 1 ? '' : 's')]);
         a.rows.push(['Left', String(G.grenades)]);
         if (mine) a.warn.push('Would also catch ' + mine + ' of your own.');
         d.confirm = { text: armed ? 'Again to throw' : 'Tap to aim', state: armed ? (mine ? 'danger' : 'ready') : 'wait' };
+      } else if (it.kind === 'interact' && it.ikind === 'debris') {
+        var dv = previewDebris(sel, it.x, it.y);
+        a.tag = 'Debris';
+        a.bigs = [{ v: String(dv.tiles), label: 'tiles', cls: '' }];
+        if (dv.crush) a.bigs.push({ v: String(dv.crush), label: 'damage', cls: 'big--dmg' });
+        a.rows.push(['Shove', dv.tiles ? dv.tiles + ' of ' + debrisReach(G) : 'blocked — nowhere to go']);
+        a.rows.push(['Stops on', dv.what]);
+        if (dv.mine) a.warn.push('That drives one of your own back.');
+        d.confirm = { text: armed ? 'Again to shove' : 'Tap to shove',
+                      state: armed ? (dv.mine ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'interact') {
         a.tag = it.ikind === 'console' ? 'Console' : 'Blast door';
         a.rows.push(['Effect', it.ikind === 'console'
@@ -2669,9 +2963,10 @@
       sel.hasActed = true;
       say(res); msg(res);
     } else if (it.kind === 'move') {
+      faceAlong(sel, it.path, it.x, it.y);
       sel.x = it.x; sel.y = it.y; sel.hasMoved = true;
       note(q, { kind: 'walk', id: sel.id, path: it.path });
-      if (at(G, it.x, it.y).t === 'water' && at(G, it.x, it.y).live) hurt(G, sel, SHOCK_DMG, q, 'SHOCK');
+      if (at(G, it.x, it.y).t === 'water' && at(G, it.x, it.y).live) hurt(G, sel, shockDmg(G), q, 'SHOCK');
     }
     G.ui.pending = null;
     G.ui.mode = 'SELECT';
@@ -2808,12 +3103,11 @@
     m.perks.push(label);
   }
 
-  // Every requisition cuts both ways. `run` is what it does for you; `foe` is
-  // what it does for them when they draft it first, and `took` is how that
-  // reads on the debrief. Same crate, whoever gets there first.
-  // Eighteen crates. `run` is what it does for your squad, `foe` is what it does
-  // for theirs when they draft it first, `took` is how that reads on the debrief,
-  // and `weight` is how badly they want it (they always take the best one).
+  // Every requisition cuts both ways. `run` is what it does for you, `foe` is
+  // what it does for them when they draft it first, `took` is how that reads on
+  // the debrief, and `weight` is how badly they want it (they always take the
+  // best one). `scope` says who ends up holding it, so the card can say so
+  // rather than quietly handing the good gun to whoever the code picked.
   // Squad-wide numbers live on G.mods and fold into weapons via gunFor().
   function bumpMod(k, n, label) {
     G.mods[k] = (G.mods[k] || 0) + n;
@@ -2830,24 +3124,30 @@
     if (m.perks) m.perks = m.perks.filter(function (t) { return WEAPON_NAMES.indexOf(t) < 0; });
     givePerk(m, WEAPONS[id].name);
   }
-  function giveWeapon(id) {
-    // hand it to whoever is carrying the least interesting thing
-    var m = firstWith(function (x) { return x.weaponId === 'pistol'; }) ||
-            firstWith(function (x) { return x.weaponId === 'carbine'; }) ||
-            G.squad[G.squad.length - 1];
-    setWeapon(m, id);
+  // Who gets a new gun: whoever is carrying the least interesting thing. Split
+  // out from giveWeapon so the reward card and the actual handover ask the same
+  // question — otherwise the card can name one operative and the gun go to
+  // another.
+  function weaponRecipient() {
+    return firstWith(function (x) { return x.weaponId === 'pistol'; }) ||
+           firstWith(function (x) { return x.weaponId === 'carbine'; }) ||
+           G.squad[G.squad.length - 1];
   }
+  function upgradeRecipient() {
+    return firstWith(function (x) { return UPGRADE[x.weaponId]; });
+  }
+  function giveWeapon(id) { setWeapon(weaponRecipient(), id); }
 
   var REWARDS = [
     // --- squad ---------------------------------------------------------
     {
-      id: 'recruit', icon: '+', name: 'Reinforcement', desc: 'One more operative', weight: 9,
+      id: 'recruit', icon: '+', name: 'Reinforcement', desc: 'One more operative', scope: 'new', weight: 9,
       ok: function () { return G.squad.length < MAX_OPS; },
       run: function () { G.squad.push(newOp('pistol')); },
       foe: function () { G.foe.count += 1; }, took: 'one more hostile per sector'
     },
     {
-      id: 'upgrade', icon: '\u2191', name: 'Weapon upgrade', desc: 'Trade one up a tier', weight: 7,
+      id: 'upgrade', icon: '\u2191', name: 'Weapon upgrade', desc: 'Trade one up a tier', scope: 'upgrade', weight: 7,
       ok: function () { return G.squad.some(function (m) { return UPGRADE[m.weaponId]; }); },
       run: function () {
         var m = firstWith(function (x) { return UPGRADE[x.weaponId]; });
@@ -2857,51 +3157,51 @@
     },
     // --- weapons -------------------------------------------------------
     {
-      id: 'carbine', icon: '\u2261', name: 'Carbine', desc: 'Range 3 \u00b7 3\u20134 damage', weight: 4,
+      id: 'carbine', icon: '\u2261', name: 'Carbine', desc: 'Range 3 \u00b7 2 damage \u00b7 shoves 2', scope: 'gun', weight: 4,
       ok: function () { return G.squad.some(function (m) { return m.weaponId === 'pistol'; }); },
       run: function () { giveWeapon('carbine'); },
       foe: function () { G.foe.acc += 8; }, took: 'they aim better'
     },
     {
-      id: 'hammer', icon: '\u25AC', name: 'Breach hammer', desc: 'Adjacent \u00b7 4\u20136 \u00b7 shoves 3', weight: 8,
+      id: 'hammer', icon: '\u25AC', name: 'Breach hammer', desc: 'Adjacent \u00b7 2\u20133 \u00b7 shoves 4', scope: 'gun', weight: 8,
       ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'hammer'; }); },
       run: function () { giveWeapon('hammer'); },
       foe: function () { G.foe.kb += 1; }, took: 'their hits shove you'
     },
     {
-      id: 'lance', icon: '\u2500', name: 'Arc lance', desc: 'Range 3 \u00b7 pierces the lane', weight: 5,
+      id: 'lance', icon: '\u2500', name: 'Arc lance', desc: 'Range 3 \u00b7 pierces the lane', scope: 'gun', weight: 5,
       ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'lance'; }); },
       run: function () { giveWeapon('lance'); },
       foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
     },
     {
-      id: 'prod', icon: '\u26A1', name: 'Shock prod', desc: 'Adjacent, never misses, stuns', weight: 4,
+      id: 'prod', icon: '\u26A1', name: 'Shock prod', desc: 'Adjacent, never misses, stuns', scope: 'gun', weight: 4,
       ok: function () { return !G.squad.some(function (m) { return m.weaponId === 'shock'; }) && G.squad.length > 1; },
       run: function () { giveWeapon('shock'); },
       foe: function () { G.foe.jolt = true; }, took: 'their hits disable you'
     },
     // --- weapon perks --------------------------------------------------
     {
-      id: 'ammo', icon: '\u25B2', name: 'Hollow points', desc: '+1 damage, every weapon', weight: 7,
+      id: 'ammo', icon: '\u25B2', name: 'Hollow points', desc: '+1 damage, every weapon', scope: 'all', weight: 7,
       ok: function () { return (G.mods.dmg || 0) < 3; },
       run: function () { bumpMod('dmg', 1, 'Hollow points'); },
       foe: function () { G.foe.dmg += 1; }, took: '+1 damage'
     },
     {
-      id: 'optics', icon: '\u25CE', name: 'Targeting optics', desc: '+8% to hit', weight: 5,
+      id: 'optics', icon: '\u25CE', name: 'Targeting optics', desc: '+8% to hit', scope: 'all', weight: 5,
       ok: function () { return (G.mods.acc || 0) < 16; },
       run: function () { bumpMod('acc', 8, 'Optics'); },
       foe: function () { G.foe.acc += 8; }, took: 'they aim better'
     },
     {
-      id: 'sight', icon: '\u21E2', name: 'Long optics', desc: '+1 range, every weapon', weight: 6,
+      id: 'sight', icon: '\u21E2', name: 'Long optics', desc: '+1 range, every weapon', scope: 'all', weight: 6,
       ok: function () { return (G.mods.range || 0) < 2; },
       run: function () { bumpMod('range', 1, 'Long optics'); },
       foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
     },
     // --- defence -------------------------------------------------------
     {
-      id: 'plating', icon: '\u25A3', name: 'Plating', desc: '+2 health, everyone', weight: 4,
+      id: 'plating', icon: '\u25A3', name: 'Plating', desc: '+2 health, everyone', scope: 'all', weight: 4,
       // capped: the hull readout is drawn as pips, and unbounded HP would both
       // overflow the card and flatten the difficulty curve
       ok: function () { return G.squad.every(function (m) { return m.maxHp < 11; }); },
@@ -2909,60 +3209,136 @@
       foe: function () { G.foe.hp += 1; }, took: '+1 health'
     },
     {
-      id: 'plates', icon: '\u2593', name: 'Ablative plates', desc: 'Every hit lands 1 softer', weight: 6,
+      id: 'plates', icon: '\u2593', name: 'Ablative plates', desc: 'Every hit lands 1 softer', scope: 'all', weight: 6,
       ok: function () { return (G.mods.soak || 0) < 2; },
       run: function () { bumpMod('soak', 1, 'Ablative plates'); },
       foe: function () { G.foe.soak += 1; }, took: 'your hits land softer'
     },
     {
-      id: 'boots', icon: '\u2913', name: 'Mag boots', desc: 'Nothing can shove you', weight: 5,
+      id: 'boots', icon: '\u2913', name: 'Mag boots', desc: 'Nothing can shove you', scope: 'all', weight: 5,
       ok: function () { return !G.mods.noShove; },
       run: function () { G.mods.noShove = true; G.squad.forEach(function (m) { givePerk(m, 'Mag boots'); }); },
       foe: function () { G.foe.brace += 1; }, took: 'they resist your shoves'
     },
     {
-      id: 'surgeon', icon: '\u271A', name: 'Field surgeon', desc: 'One operative gets back up', weight: 7,
+      id: 'surgeon', icon: '\u271A', name: 'Field surgeon', desc: 'One operative gets back up', scope: 'all', weight: 7,
       ok: function () { return (G.mods.revive || 0) < 2; },
       run: function () { G.mods.revive = (G.mods.revive || 0) + 1; },
       foe: function () { G.foe.hp += 1; }, took: '+1 health'
     },
     // --- mobility ------------------------------------------------------
     {
-      id: 'legs', icon: '\u00BB', name: 'Servo legs', desc: '+1 move, everyone', weight: 5,
+      id: 'legs', icon: '\u00BB', name: 'Servo legs', desc: '+1 move, everyone', scope: 'all', weight: 5,
       ok: function () { return G.squad.every(function (m) { return m.move < 5; }); },
       run: function () { G.squad.forEach(function (m) { m.move += 1; tallyPerk(m, 'Servo legs'); }); },
       foe: function () { G.foe.move += 1; }, took: '+1 move'
     },
     // --- ordnance and the room ----------------------------------------
     {
-      id: 'frags', icon: '\u25C9', name: 'Ordnance', desc: '+2 frag grenades', weight: 3,
+      id: 'frags', icon: '\u25C9', name: 'Ordnance', desc: '+2 frag grenades', scope: 'room', weight: 3,
       ok: function () { return true; },
       run: function () { G.grenades += 2; },
       foe: function () { G.foe.shrapnel = true; }, took: 'they burst on death'
     },
     {
-      id: 'cache', icon: '\u2691', name: 'Fuel cache', desc: 'One more barrel per sector', weight: 3,
+      id: 'cache', icon: '\u2691', name: 'Fuel cache', desc: 'One more barrel per sector', scope: 'room', weight: 3,
       ok: function () { return (G.mods.barrels || 0) < 2; },
       run: function () { G.mods.barrels = (G.mods.barrels || 0) + 1; },
       foe: function () { G.foe.shrapnel = true; }, took: 'they burst on death'
     },
     {
-      id: 'charges', icon: '\u25BC', name: 'Breaching charges', desc: 'One more void per sector', weight: 6,
+      id: 'charges', icon: '\u25BC', name: 'Breaching charges', desc: 'One more void per sector', scope: 'room', weight: 6,
       ok: function () { return (G.mods.pits || 0) < 2; },
       run: function () { G.mods.pits = (G.mods.pits || 0) + 1; },
       foe: function () { G.foe.count += 1; }, took: 'one more hostile per sector'
     },
     {
-      id: 'jammer', icon: '\u2716', name: 'Signal jammer', desc: 'They skip their next draft', weight: 8,
+      id: 'jammer', icon: '\u2716', name: 'Signal jammer', desc: 'They skip their next draft', scope: 'room', weight: 8,
       ok: function () { return !G.foe.jammed; },
       run: function () { G.foe.jammed = true; },
       foe: function () { G.foe.jamNext = true; }, took: 'your next crate is picked over'
+    },
+
+    // --- countermeasures -----------------------------------------------
+    {
+      id: 'firewall', icon: '\u25a5', name: 'Firewall', desc: '+8% to shrug off a hack', scope: 'all', weight: 6,
+      ok: function () { return (G.mods.hackResist || 0) < 40; },
+      run: function () { bumpMod('hackResist', 8, 'Firewall'); },
+      foe: function () { G.foe.jolt = true; }, took: 'their hits disable you'
+    },
+    {
+      id: 'recon', icon: '\u25c8', name: 'Recon uplink', desc: 'See what they aim at, not just where they move', scope: 'all', weight: 9,
+      ok: function () { return !G.mods.recon; },
+      run: function () { G.mods.recon = true; G.squad.forEach(function (m) { givePerk(m, 'Recon uplink'); }); },
+      foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
+    },
+    // --- weapons -------------------------------------------------------
+    {
+      id: 'breach', icon: '\u2338', name: 'Breaching rounds', desc: 'Your fire brings bulkheads down', scope: 'all', weight: 7,
+      ok: function () { return !G.mods.breach; },
+      run: function () { G.mods.breach = true; G.squad.forEach(function (m) { givePerk(m, 'Breaching rounds'); }); },
+      foe: function () { G.foe.dmg += 1; }, took: '+1 damage'
+    },
+    {
+      id: 'sabot', icon: '\u2799', name: 'Sabot rounds', desc: 'Every weapon pierces the lane', scope: 'all', weight: 6,
+      ok: function () { return !G.mods.pierce; },
+      run: function () { G.mods.pierce = true; G.squad.forEach(function (m) { givePerk(m, 'Sabot rounds'); }); },
+      foe: function () { G.foe.acc += 8; }, took: 'they aim better'
+    },
+    {
+      id: 'ram', icon: '\u21f2', name: 'Kinetic ram', desc: '+1 shove, every weapon', scope: 'all', weight: 8,
+      ok: function () { return (G.mods.kb || 0) < 2; },
+      run: function () { bumpMod('kb', 1, 'Kinetic ram'); },
+      foe: function () { G.foe.kb += 1; }, took: 'their hits shove you'
+    },
+    // --- ordnance and the room ----------------------------------------
+    {
+      id: 'shaped', icon: '\u2b1f', name: 'Shaped charge', desc: 'Frags take all nine tiles', scope: 'all', weight: 5,
+      ok: function () { return !G.mods.bigFrag; },
+      run: function () { G.mods.bigFrag = true; G.squad.forEach(function (m) { givePerk(m, 'Shaped charge'); }); },
+      foe: function () { G.foe.shrapnel = true; }, took: 'they burst on death'
+    },
+    {
+      id: 'super', icon: '\u2632', name: 'Superconductor', desc: 'Live coolant hits 2 harder', scope: 'room', weight: 4,
+      ok: function () { return (G.mods.shock || 0) < 4; },
+      run: function () { G.mods.shock = (G.mods.shock || 0) + 2; },
+      foe: function () { G.foe.dmg += 1; }, took: '+1 damage'
+    },
+    {
+      id: 'salvage', icon: '\u25a8', name: 'Salvage rig', desc: 'One more block per sector', scope: 'room', weight: 3,
+      ok: function () { return (G.mods.debris || 0) < 2; },
+      run: function () { G.mods.debris = (G.mods.debris || 0) + 1; },
+      foe: function () { G.foe.count += 1; }, took: 'one more hostile per sector'
+    },
+    {
+      id: 'wrecking', icon: '\u2707', name: 'Wrecking bar', desc: 'Shove blocks 5 tiles, not 3', scope: 'all', weight: 5,
+      ok: function () { return !G.mods.debrisReach; },
+      run: function () { G.mods.debrisReach = 2; G.squad.forEach(function (m) { givePerk(m, 'Wrecking bar'); }); },
+      foe: function () { G.foe.brace += 1; }, took: 'they resist your shoves'
+    },
+    {
+      id: 'codes', icon: '\u2b1a', name: 'Bulkhead codes', desc: 'One more blast door per sector', scope: 'room', weight: 3,
+      ok: function () { return (G.mods.doors || 0) < 2; },
+      run: function () { G.mods.doors = (G.mods.doors || 0) + 1; },
+      foe: function () { G.foe.sight += 1; }, took: '+1 to their range'
     }
   ];
 
   function rewardById(id) {
     for (var i = 0; i < REWARDS.length; i++) if (REWARDS[i].id === id) return REWARDS[i];
     return null;
+  }
+  // Who ends up holding this crate. Resolved before run() fires, and for the two
+  // targeted cases it asks the same helper the handover does, so the card cannot
+  // name one operative and the gun go to another.
+  function scopeLabel(r) {
+    var m = null;
+    if (r.scope === 'gun') m = weaponRecipient();
+    else if (r.scope === 'upgrade') m = upgradeRecipient();
+    if (m) return { text: '→ ' + m.name.toUpperCase(), named: true };
+    if (r.scope === 'new') return { text: 'A new operative', named: false };
+    if (r.scope === 'room') return { text: 'Squad stores', named: false };
+    return { text: 'All operatives', named: false };
   }
   // Hostiles draft on every second sector.
   function foeDrafts(level) { return level % 2 === 0; }
@@ -3038,9 +3414,11 @@
       '<span class="tab">Requisition &mdash; take one</span>' +
       '<div class="rewards">';
     offer.forEach(function (r, k) {
+      var who = scopeLabel(r);
       html += '<button class="reward" type="button" data-r="' + k + '">' +
         '<span class="reward__icon">' + r.icon + '</span>' +
         '<span class="reward__name">' + r.name + '</span>' +
+        '<span class="reward__who' + (who.named ? ' reward__who--one' : '') + '">' + who.text + '</span>' +
         '<span class="reward__desc">' + r.desc + '</span></button>';
     });
     html += '</div>' + nextWarn;
@@ -3114,7 +3492,11 @@
     G.squad = [newOp('pistol'), newOp('shotgun')];
     G.foe = { count: 0, dmg: 0, hp: 0, move: 0, acc: 0, sight: 0, kb: 0, soak: 0, brace: 0,
               jolt: false, shrapnel: false, jammed: false, jamNext: false, taken: [] };
-    G.mods = { dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false };
+    G.mods = {
+      dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false,
+      hackResist: 0, kb: 0, shock: 0, debris: 0, debrisReach: 0, doors: 0,
+      recon: false, breach: false, pierce: false, bigFrag: false
+    };
     G.runStart = Date.now();
     track('game_started', {});
     startLevel();
@@ -3126,6 +3508,16 @@
     G.tiles = built.tiles;
     G.units = built.units;
     G.grenades = built.grenades;
+    // Everything the rules read off the state rather than off a unit has to be
+    // carried across too. This was missed for shrapnel and revive, which meant
+    // the field surgeon never brought anyone back in a real game — it only ever
+    // worked inside the solver, where the state came straight from the builder.
+    G.shrapnel = !!built.shrapnel;
+    G.revive = built.revive || 0;
+    G.debrisReach = built.debrisReach || 0;
+    G.shock = built.shock || 0;
+    G.breach = !!built.breach;
+    G.bigFrag = !!built.bigFrag;
     G.turn = 1;
     G.phase = 'PLAYER';
     G.fx = []; G.rings = []; G.beams = []; G.shards = [];
@@ -3190,7 +3582,11 @@
       level: 1, turn: 1, phase: 'TITLE', tile: 48,
       foe: { count: 0, dmg: 0, hp: 0, move: 0, acc: 0, sight: 0, kb: 0, soak: 0, brace: 0,
              jolt: false, shrapnel: false, jammed: false, jamNext: false, taken: [] },
-      mods: { dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false },
+      mods: {
+        dmg: 0, acc: 0, range: 0, soak: 0, revive: 0, barrels: 0, pits: 0, noShove: false,
+        hackResist: 0, kb: 0, shock: 0, debris: 0, debrisReach: 0, doors: 0,
+        recon: false, breach: false, pierce: false, bigFrag: false
+      },
       fx: [], rings: [], beams: [], shards: [],
       ui: { mode: 'SELECT', selId: null, hover: null, path: null, pending: null }
     };
@@ -3237,6 +3633,11 @@
       alive: alive, at: at, DICE: DICE, WEAPONS: WEAPONS, ENEMIES: ENEMIES,
       blocksMove: blocksMove, blocksSight: blocksSight, explode: explode,
       shotsFrom: shotsFrom, unitAt: unitAt, SECTOR_NAMES: SECTOR_NAMES,
+      shoveDebris: shoveDebris, tile: tile, fire: fire, reach: reach,
+      REWARDS: REWARDS, interactables: interactables, interact: interact,
+      // Live state + a redraw, so a browser harness can stage an exact board.
+      // Only ever reachable when `module` exists, which production never defines.
+      state: function () { return G; }, redraw: function () { layout(); draw(); },
       W: W, H: H, TURN_BUDGET: TURN_BUDGET
     };
   }

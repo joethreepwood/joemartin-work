@@ -312,6 +312,11 @@ button,canvas,a{-webkit-user-select:none;user-select:none;}
   background:var(--panel2);border:3px solid var(--edge);text-align:left;}
 .reward__icon{font-family:var(--heavy);font-size:1.5rem;line-height:1;color:var(--mint);}
 .reward__name{font-family:var(--heavy);font-size:.8rem;letter-spacing:.03em;color:#fff;}
+/* who ends up holding it: a callsign reads as a decision, the generic cases
+   stay quiet so they don't compete with the name */
+.reward__who{font-size:.64rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--dim);margin-top:-.1rem;}
+.reward__who--one{color:var(--mint);font-weight:700;}
 .reward__desc{font-size:.72rem;color:var(--dim);line-height:1.45;}
 @media(max-width:560px){ .rewards{grid-template-columns:1fr;} }
 
