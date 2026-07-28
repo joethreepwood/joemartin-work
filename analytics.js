@@ -11,7 +11,7 @@
    Autocapture is off, so every event below is deliberate.
    Nothing here is allowed to break the page: if PostHog is
    blocked or slow, tracking degrades to a no-op.
-   Loaded with `defer` on index.html and game.html.
+   Loaded with `defer` on index.html and null-sector.html.
    ============================================================ */
 (function () {
   'use strict';

@@ -17,9 +17,11 @@ My personal site. Plain HTML/CSS, no build step, hosted free on GitHub Pages.
 ## Null Sector (the game)
 
 A turn-based tactics game that runs in the browser. It's a separate page, since
-it needs the whole viewport and mustn't scroll — [`game.html`](game.html),
-[`game.css`](game.css), [`game.js`](game.js). Section 07 of `index.html` links
-to it. Same rules as the rest of the site: no build step, no dependencies.
+it needs the whole viewport and mustn't scroll — [`null-sector.html`](null-sector.html),
+[`game.css`](game.css), [`game.js`](game.js). The Null Sector section of
+`index.html` links to it. `game.html` is a thin redirect kept for the old URL
+(canonical → `null-sector.html`). Same rules as the rest of the site: no build
+step, no dependencies.
 
 `game.js` is one IIFE split into numbered sections (config, RNG, data, rules,
 enemy AI, generation, verifier, render, input, turn controller). Two things
@@ -214,7 +216,7 @@ were checked; it's a test seam, not something production can reach.
 
 [`analytics.js`](analytics.js) wires the site and the game into PostHog
 (project **JoeMartin.work**, in the Joe-OS org). Loaded with `defer` on both
-`index.html` and `game.html`.
+`index.html` and `null-sector.html`.
 
 - **Cookieless.** `cookieless_mode: 'always'` — no cookies, no localStorage, no
   consent banner needed. Visitors are counted with a hash computed on PostHog's
