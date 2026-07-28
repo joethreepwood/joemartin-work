@@ -110,6 +110,24 @@ because a block landing on a lever tile would reject the whole level, and before
 because blocks stop movement, so connectivity repair has to be free to clear one
 out of the only corridor. `connectAll` bulldozes `debris` for exactly that reason.
 
+Rooms are irregular, not a fixed square. `carveArena` (run first in
+`buildLevel`, before anything is placed) marks edge tiles `off` — out of play,
+drawn as empty, and solid to feet, sight and shoves exactly like the board
+edge, so it's a shape change, not a new mechanic. The carve is deliberately
+constrained to a **skyline**: `off` only ever sits at the top of a column or as
+a whole side-margin column, never mid-column, and the bottom row is never
+touched. That guarantees every surviving column still reaches the always-floor
+bottom row, so the room is one connected piece by construction — down-then-along
+the bottom is always a valid path, and `connectAll` never has to fight the
+shape. `keepMainRegion` and an area/deploy floor check are cheap safety nets; a
+carve that leaves too little room falls back to the full square, so the worst
+case is a plain sector. Carving raises the per-`buildLevel` rejection rate
+(~8%), but the pipeline retries 40 seeds and still falls back ~never — measure
+with the harness rather than trusting that. Rendering: `draw()` skips `off`
+tiles, `drawFrame` traces the silhouette by drawing an edge wherever a playable
+tile meets `off` or the grid edge, and `fillCell`/`ringCell` no-op on `off` so a
+highlight or AoE can't bleed into the void beside the room.
+
 Sector names come from `SECTOR_NAMES` and are read in order: a run is a silent
 heist told only through the rooms you pass, looping with a pass number once you
 run past the roof.

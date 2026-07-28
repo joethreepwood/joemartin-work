@@ -208,19 +208,24 @@
   // A blast door never stops feet — you shoulder through it either way. Shut, it
   // stops line of sight and gunfire. So it is a lane-breaker and a place to
   // hide, not a wall that pens anyone in.
+  // 'off' is carved-away space — not part of this sector's room. It behaves
+  // exactly like the board edge: solid to feet, sight and shoves. That is the
+  // whole trick behind irregular rooms — the arena boundary is no longer the
+  // rectangle, it is wherever the 'off' tiles start.
   function blocksMove(s, x, y) {
     var t = at(s, x, y).t;
-    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'pit' || t === 'debris';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'pit' || t === 'debris' || t === 'off';
   }
   function blocksSight(s, x, y) {
     var t = at(s, x, y).t;
     if (t === 'door') return !at(s, x, y).open;
-    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris' || t === 'off';
   }
   function blocksKnock(s, x, y) {
     var t = at(s, x, y).t;      // doors let bodies through, same as feet
-    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris';
+    return t === 'wall' || t === 'barrel' || t === 'console' || t === 'debris' || t === 'off';
   }
+  function inArena(s, x, y) { return inB(x, y) && at(s, x, y).t !== 'off'; }
 
   function unitAt(s, x, y) {
     for (var i = 0; i < s.units.length; i++) {
@@ -876,6 +881,63 @@
   // ============================================================
   function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
 
+  // ---- irregular rooms -------------------------------------------------
+  // Carve the 8x8 square down to a different silhouette each sector, so no two
+  // rooms read the same. We only ever bite in from the edges (never punch an
+  // interior hole), never touch the bottom row — the deploy line and the anchor
+  // the rest of the build hangs off — and afterwards keep only the single piece
+  // still joined to that bottom row. Marked tiles become 'off'.
+  function carveArena(s, rng) {
+    var x, y;
+    // Off tiles only ever sit at the TOP of a column (a skyline) or as a whole
+    // side-margin column. That's a deliberate constraint: every surviving column
+    // still reaches the always-floor bottom row, so any cell connects to any
+    // other by dropping straight down and running along the bottom — the room is
+    // connected by construction and connectivity repair never has to fight the
+    // shape. It also keeps rows H-1 and H-2 (deploy) clear, since the skyline is
+    // capped well above them.
+    function cutColTop(cx, h) { for (var cy = 0; cy < h && cy < H - 2; cy++) s.tiles[cy][cx] = tile('off'); }
+
+    // side margins: occasionally shave one full column off a side (narrower
+    // rooms). Kept rare, and never both sides at once, so there's always room.
+    var ml = 0, mr = 0, side = rng();
+    if (side < 0.22) ml = 1; else if (side < 0.44) mr = 1;
+    for (x = 0; x < W; x++) if (x < ml || x > W - 1 - mr) for (y = 0; y < H - 1; y++) s.tiles[y][x] = tile('off');
+
+    // a stepped skyline across the surviving columns: a gentle random walk so
+    // neighbouring columns stay close in height and it reads as a room, not
+    // noise. Capped shallow so the fighting space up top stays generous.
+    var lo = rng() < 0.5 ? 1 : 0;                         // 0-1 rows off the whole top
+    var hi = Math.min(H - 5, lo + 1 + Math.floor(rng() * 2));   // at most ~3 rows carved anywhere
+    var h = lo + Math.floor(rng() * (hi - lo + 1));
+    for (x = ml; x <= W - 1 - mr; x++) {
+      h += Math.floor(rng() * 3) - 1;                     // -1 / 0 / +1
+      if (h < lo) h = lo; if (h > hi) h = hi;
+      cutColTop(x, h);
+    }
+  }
+
+  // Keep only the piece joined to the bottom row; wall off any stranded pocket.
+  // Returns the surviving floor-able area.
+  function keepMainRegion(s) {
+    var anchor = null, x, y;
+    for (x = 0; x < W && !anchor; x++) if (s.tiles[H - 1][x].t !== 'off') anchor = { x: x, y: H - 1 };
+    if (!anchor) return 0;
+    var seen = {}, q = [anchor], n = 0;
+    seen[anchor.y * 32 + anchor.x] = true;
+    while (q.length) {
+      var c = q.shift(); n++;
+      for (var i = 0; i < 4; i++) {
+        var nx = c.x + DIRS[i][0], ny = c.y + DIRS[i][1], k = ny * 32 + nx;
+        if (inB(nx, ny) && !seen[k] && s.tiles[ny][nx].t !== 'off') { seen[k] = true; q.push({ x: nx, y: ny }); }
+      }
+    }
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      if (s.tiles[y][x].t !== 'off' && !seen[y * 32 + x]) s.tiles[y][x] = tile('off');
+    }
+    return n;
+  }
+
   function connectAll(s, must) {
     // Flood from the first required cell; knock down walls until every
     // required cell is in the same region.
@@ -893,10 +955,15 @@
       var bad = null;
       for (var m = 0; m < must.length; m++) if (!seen[must[m].y * 32 + must[m].x]) { bad = must[m]; break; }
       if (!bad) return true;
-      // carve a straight corridor from the orphan back toward the anchor
+      // carve a corridor from the orphan back toward the anchor, preferring the
+      // axis whose next step stays inside the arena so it routes around a carved
+      // notch instead of dead-ending on it. Never bulldozes 'off' — the room
+      // shape is fixed, only walls inside it come down.
       var cx = bad.x, cy = bad.y, a = must[0], steps = 0;
       while ((cx !== a.x || cy !== a.y) && steps++ < 20) {
-        if (cx !== a.x) cx += Math.sign(a.x - cx); else cy += Math.sign(a.y - cy);
+        var dxs = Math.sign(a.x - cx), dys = Math.sign(a.y - cy);
+        var xBlocked = dxs !== 0 && !inArena(s, cx + dxs, cy);   // next x-step lands on 'off'
+        if (dxs !== 0 && !(xBlocked && dys !== 0)) cx += dxs; else cy += dys;
         var t = at(s, cx, cy);
         if (t.t === 'wall' || t.t === 'pit' || t.t === 'barrel' || t.t === 'console' || t.t === 'debris') s.tiles[cy][cx] = tile('floor');
         if (t.t === 'door') t.open = true;
@@ -911,6 +978,15 @@
     var s = { tiles: blankTiles(), units: [], grenades: grenades, seed: seed, level: level };
     var i, x, y, tries;
 
+    // --- shape: carve the square into an irregular room ---
+    // Done first, so every later step (walls, deploy, hazards, connectivity)
+    // works against the real silhouette. A carve that leaves too little room
+    // falls back to the full square, so the worst case is just a plain sector.
+    carveArena(s, rng);
+    var area = keepMainRegion(s), band = 0;
+    for (x = 0; x < W; x++) { if (s.tiles[H - 1][x].t !== 'off') band++; if (s.tiles[H - 2][x].t !== 'off') band++; }
+    if (area < 30 || band < squad.length + 2) s.tiles = blankTiles();
+
     // --- terrain: a few wall clusters, kept out of the deploy band ---
     var nWalls = 2 + Math.floor(rng() * 3) + Math.min(3, Math.floor(level / 3));
     for (i = 0; i < nWalls; i++) {
@@ -918,13 +994,16 @@
       var len = 1 + Math.floor(rng() * 3), vert = rng() < 0.5;
       for (var l = 0; l < len; l++) {
         var px = wx + (vert ? 0 : l), py = wy + (vert ? l : 0);
-        if (inB(px, py) && py < H - 2) s.tiles[py][px] = tile('wall');
+        if (inB(px, py) && py < H - 2 && s.tiles[py][px].t !== 'off') s.tiles[py][px] = tile('wall');
       }
     }
 
-    // --- deploy the squad along the bottom ---
+    // --- deploy the squad along the bottom (skipping any carved-off tiles) ---
     var slots = [];
-    for (x = 0; x < W; x++) { slots.push({ x: x, y: H - 1 }); slots.push({ x: x, y: H - 2 }); }
+    for (x = 0; x < W; x++) {
+      if (s.tiles[H - 1][x].t !== 'off') slots.push({ x: x, y: H - 1 });
+      if (s.tiles[H - 2][x].t !== 'off') slots.push({ x: x, y: H - 2 });
+    }
     for (i = slots.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)), t2 = slots[i]; slots[i] = slots[j]; slots[j] = t2; }
     for (i = 0; i < squad.length; i++) {
       var sl = slots[i];
@@ -1555,11 +1634,15 @@
     }
   }
 
+  // Highlights never paint carved-off space, so an AoE or lane that clips the
+  // edge of an irregular room doesn't bleed into the void beside it.
   function fillCell(x, y, color) {
+    if (!inArena(G, x, y)) return;
     ctx.fillStyle = color;
     ctx.fillRect(x * G.tile + 1, y * G.tile + 1, G.tile - 2, G.tile - 2);
   }
   function ringCell(x, y, color, wid) {
+    if (!inArena(G, x, y)) return;
     ctx.strokeStyle = color; ctx.lineWidth = wid || 2;
     ctx.strokeRect(x * G.tile + 2, y * G.tile + 2, G.tile - 4, G.tile - 4);
   }
@@ -2097,18 +2180,38 @@
     }
   }
 
+  // Trace the room's outline by drawing a frame segment on any playable tile
+  // edge that meets carved space or the grid edge. For a full square this is
+  // just the old rectangle; for a carved room it follows every notch.
+  function drawFrame(T) {
+    ctx.strokeStyle = C.frame; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      if (!inArena(G, x, y)) continue;
+      var l = x * T, r = (x + 1) * T, tp = y * T, bt = (y + 1) * T;
+      if (!inArena(G, x, y - 1)) { ctx.moveTo(l, tp + 1.5); ctx.lineTo(r, tp + 1.5); }
+      if (!inArena(G, x, y + 1)) { ctx.moveTo(l, bt - 1.5); ctx.lineTo(r, bt - 1.5); }
+      if (!inArena(G, x - 1, y)) { ctx.moveTo(l + 1.5, tp); ctx.lineTo(l + 1.5, bt); }
+      if (!inArena(G, x + 1, y)) { ctx.moveTo(r - 1.5, tp); ctx.lineTo(r - 1.5, bt); }
+    }
+    ctx.stroke();
+  }
+
   function draw() {
     if (!G || !ctx) return;
     var T = G.tile;
     ctx.clearRect(0, 0, W * T, H * T);
     var x, y;
-    for (y = 0; y < H; y++) for (x = 0; x < W; x++) drawTile(x, y);
-    // deploy band: a quiet marker so you can see where your side of the room is
+    // carved-off tiles are drawn as nothing — the room is whatever's left
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) if (at(G, x, y).t !== 'off') drawTile(x, y);
+    // deploy band: a quiet marker for your side of the room, playable tiles only
     ctx.fillStyle = 'rgba(0,229,255,.05)';
-    ctx.fillRect(0, (H - 2) * T, W * T, 2 * T);
+    for (x = 0; x < W; x++) for (y = H - 2; y < H; y++) if (inArena(G, x, y)) ctx.fillRect(x * T, y * T, T, T);
     ctx.strokeStyle = 'rgba(0,229,255,.22)'; ctx.lineWidth = 1;
     ctx.setLineDash([6, 5]);
-    ctx.beginPath(); ctx.moveTo(0, (H - 2) * T + .5); ctx.lineTo(W * T, (H - 2) * T + .5); ctx.stroke();
+    ctx.beginPath();
+    for (x = 0; x < W; x++) if (inArena(G, x, H - 2)) { ctx.moveTo(x * T, (H - 2) * T + .5); ctx.lineTo((x + 1) * T, (H - 2) * T + .5); }
+    ctx.stroke();
     ctx.setLineDash([]);
     drawHighlights();
     drawIntents();
@@ -2117,9 +2220,7 @@
     drawThreat();             // one total per threatened operative
     drawOdds(selected());     // last, so nothing can cover the to-hit numbers
     drawFx();
-    // frame the board so it reads as a piece of equipment, not a bleed
-    ctx.strokeStyle = C.frame; ctx.lineWidth = 3;
-    ctx.strokeRect(1.5, 1.5, W * T - 3, H * T - 3);
+    drawFrame(T);
     syncHud();
   }
 
@@ -2833,6 +2934,7 @@
 
   function renderTip(t) {
     if (!t || G.phase !== 'PLAYER') { tipEmpty(); return; }
+    if (!inArena(G, t.x, t.y)) { tipEmpty(); return; }   // carved-off space has nothing to say
     var d = describe(t);
     if (!d.rows.length && !d.confirm && !d.note && !d.warn.length) { tipEmpty(); return; }
     if (isCompact()) { renderSheet(d); placeTip(t); return; }
