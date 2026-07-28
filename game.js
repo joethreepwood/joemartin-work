@@ -394,6 +394,17 @@
       .filter(function (p) { return inB(p.x, p.y); });
   }
 
+  // A barrel takes the whole 3x3 with it, corners included. Bigger than a
+  // cross, and much easier to read on the board: everything touching it goes.
+  function blob(x, y) {
+    // origin first, so callers can skip index 0 to spare the source tile
+    var out = [{ x: x, y: y }], dx, dy;
+    for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) {
+      if ((dx || dy) && inB(x + dx, y + dy)) out.push({ x: x + dx, y: y + dy });
+    }
+    return out;
+  }
+
   // ---- mutations. `fx` is an optional effects sink so the renderer can
   // ---- replay what happened; the solver passes nothing and skips it all.
   function note(fx, o) { if (fx) fx.push(o); }
@@ -429,8 +440,8 @@
   function explode(s, x, y, fxq, depth) {
     var t = at(s, x, y);
     if (t.t === 'barrel') t.t = 'floor';
-    note(fxq, { kind: 'boom', x: x, y: y });
-    var cells = plus(x, y), i;
+    note(fxq, { kind: 'boom', x: x, y: y, wide: true });
+    var cells = blob(x, y), i;
     for (i = 0; i < cells.length; i++) {
       var u = unitAt(s, cells[i].x, cells[i].y);
       if (u) hurt(s, u, BLAST_DMG, fxq, 'BLAST');
@@ -820,8 +831,11 @@
 
     // --- hazards + interactables ---
     var enemies = alive(s, 'enemy');
-    var nPits = 1 + Math.floor(rng() * 2) + (mods.pits || 0);
-    var nBarrels = 1 + Math.floor(rng() * 2) + (mods.barrels || 0);
+    // Hazard counts creep up with the sector, so later rooms are busier places
+    // to fight in rather than just rooms with more hostiles in them.
+    var nPits = 1 + Math.floor(rng() * 2) + Math.floor(level / 4) + (mods.pits || 0);
+    var nBarrels = 1 + Math.floor(rng() * 2) + Math.floor(level / 3) + (mods.barrels || 0);
+    nPits = Math.min(5, nPits); nBarrels = Math.min(5, nBarrels);
     function freeSpot(minY, maxY) {
       for (var a = 0; a < 60; a++) {
         var fx2 = Math.floor(rng() * W), fy2 = minY + Math.floor(rng() * (maxY - minY + 1));
@@ -831,19 +845,43 @@
       }
       return null;
     }
+    // A barrel that is touching a wall is worth far more than one in open floor,
+    // because popping it demolishes the bulkhead and opens a new lane. Try for a
+    // spot like that first, then settle for anywhere.
+    function barrelSpot() {
+      for (var a = 0; a < 40; a++) {
+        var c = freeSpot(1, H - 3);
+        if (!c) return null;
+        var touching = false;
+        for (var q = 0; q < DIRS.length; q++) {
+          if (inB(c.x + DIRS[q][0], c.y + DIRS[q][1]) && at(s, c.x + DIRS[q][0], c.y + DIRS[q][1]).t === 'wall') { touching = true; break; }
+        }
+        if (touching) return c;
+      }
+      return freeSpot(1, H - 3);
+    }
     for (i = 0; i < nPits; i++) { var p = freeSpot(1, H - 3); if (p) s.tiles[p.y][p.x] = tile('pit'); }
-    for (i = 0; i < nBarrels; i++) { var b = freeSpot(1, H - 3); if (b) s.tiles[b.y][b.x] = tile('barrel'); }
+    for (i = 0; i < nBarrels; i++) { var b = barrelSpot(); if (b) s.tiles[b.y][b.x] = tile('barrel'); }
 
-    if (level >= 3 && rng() < 0.8) {              // coolant pool + its console
+    // Coolant arrives earlier now, and the pool grows with the sector — a big
+    // live pool is the most dramatic thing on the board, so it should show up.
+    if (level >= 2 && rng() < 0.85) {
       var wp = freeSpot(1, H - 3);
       if (wp) {
         s.tiles[wp.y][wp.x] = tile('water');
-        for (i = 0; i < 3; i++) {
-          var d2 = DIRS[Math.floor(rng() * 4)], nx2 = wp.x + d2[0], ny2 = wp.y + d2[1];
-          if (inB(nx2, ny2) && ny2 < H - 2 && at(s, nx2, ny2).t === 'floor' && !unitAt(s, nx2, ny2)) s.tiles[ny2][nx2] = tile('water');
+        var grow = 3 + Math.floor(level / 3), pool = [wp];
+        for (i = 0; i < grow; i++) {
+          var seed = pool[Math.floor(rng() * pool.length)];
+          var d2 = DIRS[Math.floor(rng() * 4)], nx2 = seed.x + d2[0], ny2 = seed.y + d2[1];
+          if (inB(nx2, ny2) && ny2 < H - 2 && ny2 >= 1 && at(s, nx2, ny2).t === 'floor' && !unitAt(s, nx2, ny2)) {
+            s.tiles[ny2][nx2] = tile('water');
+            pool.push({ x: nx2, y: ny2 });
+          }
         }
         var cp = freeSpot(2, H - 3);
         if (cp) s.tiles[cp.y][cp.x] = tile('console');
+        // deeper sectors get a spare terminal, so losing one is not the end of it
+        if (level >= 6 && rng() < 0.5) { var cp2 = freeSpot(1, H - 3); if (cp2) s.tiles[cp2.y][cp2.x] = tile('console'); }
       }
     }
     // --- guarantee a dice-free kill line: put a pit behind an enemy, with a
@@ -878,7 +916,7 @@
     // blocked nothing — players reasonably concluded doors did nothing at all.
     // Now we only place one in a gap that is flanked by solid ground on both
     // sides, so sealing it really does cut the lane. No gap, no door.
-    if (level >= 4 && rng() < 0.75) {
+    if (level >= 3 && rng() < 0.8) {
       var gaps = [];
       for (y = 1; y < H - 2; y++) for (x = 1; x < W - 1; x++) {
         if (at(s, x, y).t !== 'floor' || unitAt(s, x, y)) continue;
@@ -886,8 +924,12 @@
         var horiz = blocksSight(s, x, y - 1) && blocksSight(s, x, y + 1);
         if (vert || horiz) gaps.push({ x: x, y: y });
       }
-      if (gaps.length) {
-        var dp = pick(rng, gaps);
+      // Two doors from sector 6 when the room offers two real doorways, so the
+      // map has more than one lane you can shut.
+      var nDoors = (level >= 6 && gaps.length > 3) ? 2 : 1;
+      for (i = 0; i < nDoors && gaps.length; i++) {
+        var di = Math.floor(rng() * gaps.length), dp = gaps[di];
+        gaps.splice(di, 1);
         s.tiles[dp.y][dp.x] = tile('door');
         s.tiles[dp.y][dp.x].open = true;      // open on arrival; sealing it is the play
       }
@@ -919,7 +961,7 @@
       return sc;
     }
     if (shot.kind === 'barrel') {
-      var cells = plus(shot.x, shot.y);
+      var cells = blob(shot.x, shot.y);
       for (i = 0; i < cells.length; i++) {
         var v = unitAt(s, cells[i].x, cells[i].y);
         if (!v) continue;
@@ -1719,7 +1761,8 @@
       ctx.strokeStyle = rg.color;
       ctx.lineWidth = rg.hard ? 4 * (1 - p) + 1 : 3;
       neon(rg.color, rg.small ? 22 : 18);
-      var rad = T * (rg.small ? (.10 + p * .34) : (.2 + p * 1.1));
+      // a barrel takes the whole 3x3, so its ring has to reach the corners
+      var rad = T * (rg.small ? (.10 + p * .34) : (.2 + p * (rg.wide ? 1.45 : 1.1)));
       if (rg.hard) {
         // an octagon reads as a blast, a circle reads as a glow
         ctx.beginPath();
@@ -1975,7 +2018,7 @@
           delay += 70; break;
         case 'boom':
           // hard ring, a bright core, and shrapnel thrown outward
-          G.rings.push({ x: f.x, y: f.y, color: C.barrel, t: 0, dur: 520, delay: delay, hard: true });
+          G.rings.push({ x: f.x, y: f.y, color: C.barrel, t: 0, dur: 520, delay: delay, hard: true, wide: !!f.wide });
           G.rings.push({ x: f.x, y: f.y, color: '#fff5e0', t: 0, dur: 190, delay: delay, small: true });
           for (var sd = 0; sd < 7; sd++) {
             G.shards.push({ x: f.x, y: f.y, a: (Math.PI * 2 / 7) * sd + sd * 0.7,
@@ -2034,7 +2077,7 @@
     }
     if (shot.kind === 'barrel') {
       out.barrel = true;
-      out.blast = plus(shot.x, shot.y).filter(function (c) { return !!unitAt(G, c.x, c.y); }).length;
+      out.blast = blob(shot.x, shot.y).filter(function (c) { return !!unitAt(G, c.x, c.y); }).length;
       return out;
     }
     var dx = Math.sign(shot.x - sel.x), dy = Math.sign(shot.y - sel.y);
@@ -2064,15 +2107,6 @@
     }
     out.sure = out.pct >= 100;
     return out;
-  }
-
-  // Does this shot kill for certain, no dice involved? That's the mechanic the
-  // whole game rests on, so it gets called out loudly wherever it applies.
-  function sureKill(pv) {
-    if (!pv.kbKill) return null;
-    if (pv.kbKill.result === 'void') return 'Shoved into the void — certain kill';
-    if (pv.kbKill.result === 'barrel') return 'Shoved into a barrel — it detonates';
-    return null;
   }
 
   // ============================================================
@@ -2294,10 +2328,12 @@
       d.sub = 'hostile · ' + (def.atk.range === 0 ? 'suicide charge' : def.atk.range === 1 ? 'close quarters' : 'ranged');
       d.rows.push(['Health', u.hp + ' / ' + u.maxHp]);
       d.rows.push(['Move', def.move]);
-      d.rows.push(['Its attack', def.atk.range === 0
-        ? 'blast ' + u.atk.dmgMax
-        : u.atk.dmgMax + ' dmg @ ' + u.atk.range]);
-      d.rows.push(['Its turn', 'move, then attack']);
+      if (def.atk.range === 0) {
+        d.rows.push(['Attack', 'blast ' + u.atk.dmgMax]);
+      } else {
+        d.rows.push(['Attack', u.atk.dmgMax + ' dmg']);
+        d.rows.push(['Range', u.atk.range + ' tile' + (u.atk.range === 1 ? '' : 's')]);
+      }
       if (u.atk.kb) d.rows.push(['Its shove', u.atk.kb + ' tile' + (u.atk.kb === 1 ? '' : 's')]);
       if (def.kbResist) d.rows.push(['Braced', '−' + def.kbResist + ' shove']);
       if (G.foe.taken.length) d.perks = foeLabels();
@@ -2305,13 +2341,9 @@
       if (G.foe.shrapnel) d.warn.push('Bursts for 1 when killed. Do not stand next to it.');
       if (u.stunned) d.warn.push('Stunned. Skips its next turn.');
       if (u.armed) d.warn.push('Armed. Detonates next turn across its own tile and the four beside it.');
-      // Hostiles advertise movement, not aim, so what it will hit is not stated
-      // here. The damage total sits over the operative who is going to take it.
-      if (u.intent && u.intent.path && u.intent.path.length) {
-        d.rows.push(['Moving', u.intent.path.length + ' tile' + (u.intent.path.length === 1 ? '' : 's')]);
-      } else {
-        d.rows.push(['Moving', 'holding position']);
-      }
+      // Hostiles advertise movement, not aim, and the board already draws the
+      // route, so the dossier does not restate it. The damage total sits over
+      // the operative who is going to take it.
     } else if (u && u.side === 'player') {
       var wp = gun(u);
       d.tag = 'Operative'; d.name = u.name; d.kind = 'ally'; d.sub = wp.name;
@@ -2334,8 +2366,8 @@
       if (u.disabled) d.warn.push('Hacked. Cannot act this turn.');
       var inc = threatTo(u);
       if (inc.count) {
-        d.rows.push(['Incoming', (inc.sure ? '' : 'up to ') + inc.dmg + ' of ' + u.hp +
-          ' from ' + inc.count + ' hostile' + (inc.count === 1 ? '' : 's')]);
+        // No row for it — the damage badge over the operative already says the
+        // number. Only the outcomes worth a warning get words.
         if (inc.voided) d.warn.push('A shove would put them in the void. Certain death.');
         else if (inc.lethal) d.warn.push('This kills them. Move, or remove the threat.');
       }
@@ -2346,7 +2378,7 @@
       var TERRAIN = {
         pit: ['Void', 'Shove anything in and it is gone. No dice.',
               'A hole in the deck plating. It does not have a bottom.'],
-        barrel: ['Fuel barrel', BLAST_DMG + ' damage in a cross. Chains.',
+        barrel: ['Fuel barrel', BLAST_DMG + ' damage to every touching tile. Chains.',
               'Volatile promethium. One spark and the whole cell goes.'],
         water: ['Coolant', 'Harmless until charged — then ' + SHOCK_DMG + ' damage.',
               'Reactor runoff. Fine to wade through, until it is live.'],
@@ -2402,7 +2434,6 @@
           }
           if (pv.allies) a.warn.push('This lane also hits ' + pv.allies + ' of your own.');
         }
-        a.kill = sureKill(pv);
         d.confirm = { text: armed ? 'Again to fire' : 'Tap to aim', state: armed ? (pv.allies ? 'danger' : 'ready') : 'wait' };
       } else if (it.kind === 'grenade') {
         a.tag = 'Frag';
@@ -2496,9 +2527,9 @@
     // One line, in priority order: a certain kill, then any warning, then the
     // flavour caption when nothing more urgent needs saying. This is why tapping
     // a tile for its dossier now shows the flavour on a phone.
-    var urgent = (a && a.kill) || (a && a.warn[0]) || d.warn[0] || '';
+    var urgent = (a && a.warn[0]) || d.warn[0] || '';
     var line = urgent || d.flavour || '';
-    var lineCls = (a && a.kill) ? ' sheet__line--kill' : (urgent ? '' : ' sheet__line--flavour');
+    var lineCls = urgent ? '' : ' sheet__line--flavour';
     if (line) h += '<p class="sheet__line' + lineCls + '">' + line + '</p>';
     if (d.confirm) {
       h += '<div class="tip__confirm tip__confirm--' + d.confirm.state + '">' + d.confirm.text + '</div>';
@@ -2543,7 +2574,6 @@
       h += '<div class="tip__block"><span class="tab tab--mint">' + d.action.tag + '</span>';
       if (d.action.bigs.length) h += bigs(d.action.bigs);
       d.action.rows.forEach(function (r) { h += led(r[0], r[1]); });
-      if (d.action.kill) h += '<p class="tip__kill">▮ ' + d.action.kill + '</p>';
       d.action.warn.forEach(function (w) { h += '<p class="tip__warn">' + w + '</p>'; });
       h += '</div>';
     }
