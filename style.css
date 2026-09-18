@@ -52,6 +52,8 @@ main,.topbar,.hero{padding-left:clamp(1rem,4vw,2.5rem);padding-right:clamp(1rem,
 .hero__body{max-width:60rem;}
 .hero__body p{font-size:1.1rem;color:var(--soft);margin:0 0 1rem;}
 .hero__body p a{color:var(--ink);text-underline-offset:3px;}
+.hero__aka{font-family:var(--mono);font-size:.8rem !important;letter-spacing:.02em;
+      color:var(--soft);opacity:.75;margin-bottom:1.3rem !important;}
 
 .btns{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.6rem;}
 .btns--center{justify-content:center;}
